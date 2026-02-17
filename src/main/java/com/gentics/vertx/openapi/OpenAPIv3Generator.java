@@ -61,7 +61,6 @@ import io.swagger.v3.oas.models.parameters.RequestBody;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
-import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
@@ -143,7 +142,8 @@ public class OpenAPIv3Generator {
 			return server;
 		}).collect(Collectors.toList()));
 
-		openApi.setInfo(info);		
+		openApi.setInfo(info);
+		openApi.setComponents(new Components());
 		try {
 			addSecurity(openApi);
 			maybeExtraComponentSupplier.ifPresent(componentSupplier -> {
@@ -166,22 +166,7 @@ public class OpenAPIv3Generator {
 	 * @param openApi
 	 */
 	protected void addSecurity(OpenAPI openApi) {
-		Components components;
-		if (openApi.getComponents() == null) {
-			components = new Components();
-			openApi.setComponents(components);
-		} else {
-			components = openApi.getComponents();
-		}
-		SecurityScheme securityBearerAuth = new SecurityScheme();
-		securityBearerAuth.setScheme("bearer");
-		securityBearerAuth.setType(SecurityScheme.Type.HTTP);
-		securityBearerAuth.setBearerFormat("JWT");
-		components.addSecuritySchemes("bearerAuth", securityBearerAuth);
-		//TODO OAuth2
-		SecurityRequirement reqBearerAuth = new SecurityRequirement();
-		reqBearerAuth.addList("bearerAuth");
-		openApi.addSecurityItem(reqBearerAuth);
+		
 	}
 
 	@SuppressWarnings("rawtypes")
@@ -189,13 +174,7 @@ public class OpenAPIv3Generator {
 		if (StringUtils.isBlank(cls.getSimpleName())) {
 			return;
 		}
-		Components components;
-		if (openApi.getComponents() == null) {
-			components = new Components();			
-			openApi.setComponents(components);
-		} else {
-			components = openApi.getComponents();
-		}
+		Components components = openApi.getComponents();
 		if (components.getSchemas() == null) {
 			components.setSchemas(new HashMap<>(Map.of("AnyJson", new Schema<String>())));
 		}
