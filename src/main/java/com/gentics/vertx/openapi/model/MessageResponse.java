@@ -6,9 +6,9 @@ import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.vertx.core.json.Json;
 
 /**
- * The {@link GenericMessageResponse} is used when a generic message should be returned to the requester.
+ * The {@link MessageResponse} is used when a generic message should be returned to the requester.
  */
-public class GenericMessageResponse implements RestModel {
+public class MessageResponse implements RestModel {
 
 
 	@JsonProperty(required = true)
@@ -18,7 +18,7 @@ public class GenericMessageResponse implements RestModel {
 	/**
 	 * Reflection ctor
 	 */
-	public GenericMessageResponse() {
+	public MessageResponse() {
 	}
 
 	/**
@@ -26,7 +26,7 @@ public class GenericMessageResponse implements RestModel {
 	 * 
 	 * @param message
 	 */
-	public GenericMessageResponse(String message) {
+	public MessageResponse(String message) {
 		this.message = message;
 	}
 
