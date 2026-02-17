@@ -10,6 +10,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang.BooleanUtils;
+import org.raml.model.parameter.QueryParameter;
 
 /**
  * Common interface for query parameters.
@@ -21,6 +22,13 @@ public interface ParameterProvider {
 	 */
 	default void validate() {
 	}
+
+	/**
+	 * Return the RAML parameters for this provider.
+	 * 
+	 * @return
+	 */
+	Map<? extends String, ? extends QueryParameter> getRAMLParameters();
 
 	/**
 	 * Set the query parameter.

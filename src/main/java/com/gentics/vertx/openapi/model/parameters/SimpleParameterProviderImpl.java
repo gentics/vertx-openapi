@@ -1,7 +1,11 @@
 package com.gentics.vertx.openapi.model.parameters;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import org.raml.model.ParamType;
+import org.raml.model.parameter.QueryParameter;
 
 import com.gentics.vertx.openapi.model.ParameterProvider;
 
@@ -53,5 +57,18 @@ public class SimpleParameterProviderImpl implements ParameterProvider {
 			Map.Entry::getKey,
 			Map.Entry::getValue,
 			(a, b) -> b));
+	}
+
+	@Override
+	public Map<? extends String, ? extends QueryParameter> getRAMLParameters() {
+		Map<String, QueryParameter> parameters = new HashMap<>();
+
+		this.parameters.entries().forEach(e -> {
+			QueryParameter parameter = new QueryParameter();
+			parameter.setRequired(false);
+			parameter.setType(ParamType.STRING);
+			parameters.put(e.getKey(), parameter);
+		});
+		return parameters;
 	}
 }

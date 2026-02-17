@@ -47,7 +47,6 @@ import com.gentics.vertx.openapi.writer.OpenAPIVersionWriter;
 import com.gentics.vertx.openapi.writer.impl.V30Writer;
 import com.gentics.vertx.openapi.writer.impl.V31Writer;
 
-import io.netty.handler.codec.http.HttpConstants;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
@@ -92,7 +91,8 @@ public class OpenAPIv3Generator {
 	 * @param maybePathBlacklist optional regex blacklist
 	 * @param maybePathWhitelist optional regex whitelist
 	 */
-	public OpenAPIv3Generator(String version, List<String> servers, @Nonnull Optional<? extends Collection<Pattern>> maybePathBlacklist, 
+	public OpenAPIv3Generator(String version, List<String> servers, 
+			@Nonnull Optional<? extends Collection<Pattern>> maybePathBlacklist, 
 			@Nonnull Optional<? extends Collection<Pattern>> maybePathWhitelist) {
 		this.maybePathBlacklist = maybePathBlacklist;
 		this.maybePathWhitelist = maybePathWhitelist;

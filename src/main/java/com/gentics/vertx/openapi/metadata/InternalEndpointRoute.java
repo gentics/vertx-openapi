@@ -18,7 +18,7 @@ import com.gentics.vertx.openapi.model.RestModel;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.vertx.core.Handler;
 import io.vertx.core.http.HttpMethod;
-import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Route;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
@@ -189,7 +189,6 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	 * 
 	 * @param requestHandler request handler
 	 * @return Fluent API
-	 * @deprecated since requests will only be "ordered" when running in the same http verticle
 	 */
 	InternalEndpointRoute blockingHandler(Handler<RoutingContext> requestHandler);
 
@@ -359,7 +358,7 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	 * @param jsonObject
 	 * @return Fluent API
 	 */
-	InternalEndpointRoute exampleRequest(Json jsonObject);
+	InternalEndpointRoute exampleRequest(JsonObject jsonObject);
 
 	/**
 	 * Set the endpoint example request via a JSON example model. The json schema will automatically be generated.
