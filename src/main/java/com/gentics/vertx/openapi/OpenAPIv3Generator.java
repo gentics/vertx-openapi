@@ -370,58 +370,79 @@ public class OpenAPIv3Generator {
 		}
 	}
 
-	protected void addRouter(String parent, Router router, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer)
-			throws IOException {
+	/**
+	 * Add all routes of a given router to the specification
+	 * 
+	 * @param parent
+	 * @param router
+	 * @param consumer
+	 * @param maybePathItemTransformer
+	 * @throws IOException
+	 */
+	protected void addRouter(String parent, Router router, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer) throws IOException {
+		for (Route route : router.getRoutes()) {
+			addRoute(parent, route, consumer, maybePathItemTransformer);
+		}
+	}
+
+	/**
+	 * Add the given route to the specification
+	 * 
+	 * @param parent
+	 * @param route
+	 * @param consumer
+	 * @param maybePathItemTransformer
+	 * @throws IOException
+	 */
+	protected void addRoute(String parent, Route route, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer) throws IOException {
+		String rawPath = route.getPath();
+		if (StringUtils.isBlank(rawPath)) {
+			return;
+		}
+		String path = (parent + (StringUtils.equals(rawPath, "/") ? "/" : Arrays.stream(rawPath.split("/"))
+					.map(segment -> segment.startsWith(":") ? ("{" + segment.substring(1) + "}") : segment)
+					.collect(Collectors.joining("/"))))
+				.replace("//", "/");
+
+		if(maybePathBlacklist.flatMap(list -> list.stream().filter(blacklisted -> blacklisted.matcher(path).matches()).findAny()).isPresent()
+				|| (maybePathWhitelist.isPresent() && maybePathWhitelist.flatMap(list -> list.stream().filter(whitelisted -> whitelisted.matcher(path).matches()).findAny()).isEmpty())) {
+			log.debug("Path filtered off: " + path);
+			return;
+		}
 		Paths paths = consumer.getPaths();
 
-		for (Route route : router.getRoutes()) {
-			String rawPath = route.getPath();
-			if (StringUtils.isBlank(rawPath)) {
-				continue;
-			}
-			String path = (parent + (StringUtils.equals(rawPath, "/") ? "/" : Arrays.stream(rawPath.split("/"))
-						.map(segment -> segment.startsWith(":") ? ("{" + segment.substring(1) + "}") : segment)
-						.collect(Collectors.joining("/"))))
-					.replace("//", "/");
-
-			if(maybePathBlacklist.flatMap(list -> list.stream().filter(blacklisted -> blacklisted.matcher(path).matches()).findAny()).isPresent()
-					|| (maybePathWhitelist.isPresent() && maybePathWhitelist.flatMap(list -> list.stream().filter(whitelisted -> whitelisted.matcher(path).matches()).findAny()).isEmpty())) {
-				log.debug("Path filtered off: " + path);
-				continue;
-			}
-			PathItem pathItem = Optional.ofNullable(paths.get(path)).orElseGet(() -> {
-				log.debug("Raw path: " + path);
-				PathItem item = new PathItem();
-				item.setSummary(route.getName());
-				paths.put(path, item);
-				return item;
+		PathItem pathItem = Optional.ofNullable(paths.get(path)).orElseGet(() -> {
+			log.debug("Raw path: " + path);
+			PathItem item = new PathItem();
+			item.setSummary(route.getName());
+			paths.put(path, item);
+			return item;
+		});
+		Optional.ofNullable(route.getMetadata(InternalEndpointRoute.class.getCanonicalName()))
+			.map(InternalEndpointRoute.class::cast)
+			.ifPresentOrElse(endpoint -> {
+				log.debug("Path with metadata: " + path);
+				pathItem.setSummary(endpoint.getDisplayName());
+				pathItem.setDescription(endpoint.getDescription());
+				endpoint.getModel().forEach(modelComponent -> fillComponent(modelComponent, consumer));
+				resolveEndpointRoute(path, pathItem, endpoint);
+			}, () -> {
+				resolveFallbackRoute(route, pathItem);
 			});
-			Optional.ofNullable(route.getMetadata(InternalEndpointRoute.class.getCanonicalName()))
-				.map(InternalEndpointRoute.class::cast)
-				.ifPresentOrElse(endpoint -> {
-					log.debug("Path with metadata: " + path);
-					pathItem.setSummary(endpoint.getDisplayName());
-					pathItem.setDescription(endpoint.getDescription());
-					endpoint.getModel().forEach(modelComponent -> fillComponent(modelComponent, consumer));
-					resolveEndpointRoute(path, pathItem, endpoint);
-				}, () -> {
-					resolveFallbackRoute(route, pathItem);
-				});
-			String path1 = maybePathItemTransformer.map(pathItemTransformer -> {
-				String newPath = pathItemTransformer.apply(path, pathItem);
-				if (!StringUtils.equals(path, newPath)) {
-					paths.remove(path, pathItem);
-					paths.put(newPath, pathItem);
-				}
-				return path;
-			}).orElse(path);
-			if (pathItem.readOperations().isEmpty()) {
-				log.debug("Path removed due to having no operations: " + path1);
-				paths.remove(path1, pathItem);
+		String path1 = maybePathItemTransformer.map(pathItemTransformer -> {
+			String newPath = pathItemTransformer.apply(path, pathItem);
+			if (!StringUtils.equals(path, newPath)) {
+				paths.remove(path, pathItem);
+				paths.put(newPath, pathItem);
 			}
-			if (route.getSubRouter() != null) {
-				addRouter(path, route.getSubRouter(), consumer, maybePathItemTransformer);
-			}
+			return path;
+		}).orElse(path);
+		if (pathItem.readOperations().isEmpty()) {
+			log.debug("Path removed due to having no operations: " + path1);
+			paths.remove(path1, pathItem);
+		}
+		if (route.getSubRouter() != null) {
+			addRouter(path, route.getSubRouter(), consumer, maybePathItemTransformer);
 		}
 	}
 
