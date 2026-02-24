@@ -65,6 +65,16 @@ public final class InternalEndpointBuilder {
 	}
 
 	/**
+	 * Set the route order.
+	 * @param order The route order.
+	 * @return Fluent API
+	 */
+	public InternalEndpointBuilder withOrder(int order) {
+		endpoint.order(order);
+		return this;
+	}
+
+	/**
 	 * Add a content type consumed by this endpoint. Used for content based routing.
 	 *
 	 * @param contentType
