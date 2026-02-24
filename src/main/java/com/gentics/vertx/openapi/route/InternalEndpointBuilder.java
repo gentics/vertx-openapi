@@ -1,11 +1,15 @@
 package com.gentics.vertx.openapi.route;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.Triple;
 import org.raml.model.parameter.FormParameter;
 
+import com.gentics.vertx.openapi.metadata.InternalEndpointRoute;
 import com.gentics.vertx.openapi.metadata.InternalEndpointRouteImpl;
 import com.gentics.vertx.openapi.model.ParameterProvider;
 import com.gentics.vertx.openapi.model.RestModel;
@@ -24,11 +28,37 @@ import io.vertx.ext.web.RoutingContext;
 public final class InternalEndpointBuilder {
 
 	private final Router router;
-	private final InternalEndpointRouteImpl endpoint;
+	private String path;
+	private HttpMethod method;
+	private Integer order;
+	private String consumes;
+	private Handler<RoutingContext> handler;
+	private Router subRouter;
+	private Boolean useNormalisedPath;
+	private Pair<HttpResponseStatus, String> exampleResponse;
+	private Triple<HttpResponseStatus, Object, String> exampleResponseModel;
+	private Object[] exampleResponseHeader;
+	private Pair<Handler<RoutingContext>, Boolean> blockingHandler;
+	private Handler<RoutingContext> failureHandler;
+	private String produces;
+	private String pathRegex;
+	private String displayName;
+	private String description;
+	private List<Triple<String, String, String>> uriParameters;
+	private String ramlPath;
+	private List<Triple<String, String, String>> queryParameters;
+	private List<Class<? extends ParameterProvider>> queryParameterProviders;
+	private String[] traits;
+	private JsonObject exampleRequestJson;
+	private RestModel exampleRequestModel;
+	private Map<String, List<FormParameter>> exampleRequestParameters;
+	private String exampleRequestText;
+	private Boolean mutating;
+	private Collection<Class<?>> modelComponents;
+	private Boolean insecure;
 
 	private InternalEndpointBuilder(Router router) {
 		this.router = router;
-		this.endpoint = new InternalEndpointRouteImpl(router, false);
 	}
 
 	/**
@@ -49,7 +79,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withPath(String path) {
-		endpoint.path(path);
+		this.path = path;
 		return this;
 	}
 
@@ -60,7 +90,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withMethod(HttpMethod method) {
-		endpoint.method(method);
+		this.method = method;
 		return this;
 	}
 
@@ -70,7 +100,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withOrder(int order) {
-		endpoint.order(order);
+		this.order = order;
 		return this;
 	}
 
@@ -82,7 +112,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder consumes(String contentType) {
-		endpoint.consumes(contentType);
+		this.consumes = contentType;
 		return this;
 	}
 
@@ -93,7 +123,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withHandler(Handler<RoutingContext> requestHandler) {
-		endpoint.handler(requestHandler);
+		this.handler = requestHandler;
 		return this;
 	}
 
@@ -103,7 +133,7 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public InternalEndpointBuilder withSubRouter(Router router) {
-		endpoint.subRouter(router);
+		this.subRouter = router;
 		return this;
 	}
 
@@ -114,7 +144,7 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public InternalEndpointBuilder useNormalisedPath(boolean useNormalisedPath) {
-		endpoint.useNormalisedPath(useNormalisedPath);
+		this.useNormalisedPath = useNormalisedPath;
 		return this;
 	}
 
@@ -127,8 +157,8 @@ public final class InternalEndpointBuilder {
 	 *            Description of the response
 	 * @return Fluent API
 	 */
-	public InternalEndpointBuilder exampleResponse(HttpResponseStatus status, String description) {
-		endpoint.exampleResponse(status, description);
+	public InternalEndpointBuilder withExampleResponse(HttpResponseStatus status, String description) {
+		this.exampleResponse = Pair.of(status, description);
 		return this;
 	}
 
@@ -144,7 +174,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withExampleResponse(HttpResponseStatus status, Object model, String description) {
-		endpoint.exampleResponse(status, model, description);
+		this.exampleResponseModel = Triple.of(status, model, description);
 		return this;
 	}
 
@@ -164,7 +194,7 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public InternalEndpointBuilder withExampleResponse(HttpResponseStatus status, String description, String headerName, String example, String headerDescription) {
-		endpoint.exampleResponse(status, description, headerName, example, headerDescription);
+		this.exampleResponseHeader = new Object[] {status, description, headerName, example, headerDescription };
 		return this;
 	}
 
@@ -176,7 +206,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withBlockingHandler(Handler<RoutingContext> requestHandler, boolean ordered) {
-		endpoint.blockingHandler(requestHandler, ordered);
+		this.blockingHandler = Pair.of(requestHandler, ordered);
 		return this;
 	}
 
@@ -187,7 +217,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withFailureHandler(Handler<RoutingContext> failureHandler) {
-		endpoint.failureHandler(failureHandler);
+		this.failureHandler = failureHandler;
 		return this;
 	}
 
@@ -198,7 +228,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder produces(String contentType) {
-		endpoint.produces(contentType);
+		this.produces = contentType;
 		return this;
 	}
 
@@ -209,7 +239,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withPathRegex(String path) {
-		endpoint.pathRegex(path);
+		this.pathRegex = path;
 		return this;
 	}
 
@@ -220,7 +250,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withDisplayName(String name) {
-		endpoint.displayName(name);
+		this.displayName = name;
 		return this;
 	}
 
@@ -232,7 +262,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withDescription(String description) {
-		endpoint.description(description);
+		this.description = description;
 		return this;
 	}
 
@@ -246,7 +276,10 @@ public final class InternalEndpointBuilder {
 	 *            Example URI parameter value
 	 */
 	public InternalEndpointBuilder withUriParameter(String key, String description, String example) {
-		endpoint.addUriParameter(key, description, example);
+		if (this.uriParameters == null) {
+			this.uriParameters = new ArrayList<Triple<String, String, String>>(10);
+		}
+		this.uriParameters.add(Triple.of(key, description, example));
 		return this;
 	}
 
@@ -256,7 +289,7 @@ public final class InternalEndpointBuilder {
 	 * @param path
 	 */
 	public InternalEndpointBuilder withRAMLPath(String path) {
-		endpoint.setRAMLPath(path);
+		this.ramlPath = path;
 		return this;
 	}
 
@@ -268,7 +301,10 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public InternalEndpointBuilder withQueryParameter(String name, String description, String example) {
-		endpoint.addQueryParameter(name, description, example);
+		if (this.queryParameters == null) {
+			this.queryParameters = new ArrayList<Triple<String, String, String>>(10);
+		}
+		this.queryParameters.add(Triple.of(name, description, example));
 		return this;
 	}
 
@@ -281,7 +317,11 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withQueryParameters(Class<? extends ParameterProvider> clazz) {
-		endpoint.addQueryParameters(clazz);
+		if (this.queryParameterProviders == null) {
+			this.queryParameterProviders = new ArrayList<Class<? extends ParameterProvider>>(10);
+		}
+		this.queryParameterProviders.add(clazz);
+		
 		return this;
 	}
 
@@ -293,7 +333,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withTraits(String... traits) {
-		endpoint.traits(traits);
+		this.traits = traits;
 		return this;
 	}
 
@@ -304,7 +344,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withExampleRequest(JsonObject jsonObject) {
-		endpoint.exampleRequest(jsonObject);
+		this.exampleRequestJson = jsonObject;
 		return this;
 	}
 
@@ -316,7 +356,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withExampleRequest(RestModel model) {
-		endpoint.exampleRequest(model);
+		this.exampleRequestModel = model;
 		return this;
 	}
 
@@ -327,7 +367,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withExampleRequest(Map<String, List<FormParameter>> parameters) {
-		endpoint.exampleRequest(parameters);
+		this.exampleRequestParameters = parameters;
 		return this;
 	}
 
@@ -338,7 +378,7 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withExampleRequest(String bodyText) {
-		endpoint.exampleRequest(bodyText);
+		this.exampleRequestText = bodyText;
 		return this;
 	}
 
@@ -352,8 +392,8 @@ public final class InternalEndpointBuilder {
 	 * @param mutating
 	 * @return
 	 */
-	public InternalEndpointBuilder mutating(Boolean mutating) {
-		endpoint.setMutating(mutating);
+	public InternalEndpointBuilder mutating(boolean mutating) {
+		this.mutating = mutating;
 		return this;
 	}
 
@@ -364,7 +404,7 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public InternalEndpointBuilder insecure(boolean insecure) {
-		endpoint.setInsecure(insecure);
+		this.insecure = insecure;
 		return this;
 	}
 
@@ -375,7 +415,7 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public InternalEndpointBuilder withModelComponents(Collection<Class<?>> modelComponents) {
-		endpoint.setModel(modelComponents);
+		this.modelComponents = modelComponents;
 		return this;
 	}
 	/**
@@ -383,8 +423,92 @@ public final class InternalEndpointBuilder {
 	 * 
 	 * @return
 	 */
-	public Router build() {
-		endpoint.addMeToMetadata();
-		return router;
+	public InternalEndpointRoute build() {		
+		InternalEndpointRouteImpl endpoint = new InternalEndpointRouteImpl(router);
+		if (path != null) {
+			endpoint.path(path);
+		}
+		if (method != null) {
+			endpoint.method(method);
+		}
+		if (order != null) {
+			endpoint.order(order);
+		}
+		if (consumes != null) {
+			endpoint.consumes(consumes);
+		}
+		if (subRouter != null) {
+			endpoint.subRouter(subRouter);
+		}
+		if (useNormalisedPath != null) {
+			endpoint.useNormalisedPath(useNormalisedPath);
+		}
+		if (exampleResponse != null) {
+			endpoint.exampleResponse(exampleResponse.getKey(), exampleResponse.getValue());
+		}
+		if (exampleResponseModel != null) {
+			endpoint.exampleResponse(exampleResponseModel.getLeft(), exampleResponseModel.getMiddle(), exampleResponseModel.getRight());
+		}
+		if (exampleResponseHeader != null) {
+			endpoint.exampleResponse((HttpResponseStatus) exampleResponseHeader[0], (String) exampleResponseHeader[1], (String) exampleResponseHeader[2], (String) exampleResponseHeader[3], (String) exampleResponseHeader[4]);
+		}
+		if (produces != null) {
+			endpoint.produces(produces);
+		}
+		if (pathRegex != null) {
+			endpoint.pathRegex(pathRegex);
+		}
+		if (displayName != null) {
+			endpoint.displayName(displayName);
+		}
+		if (description != null) {
+			endpoint.description(description);
+		}
+		if (uriParameters != null) {
+			uriParameters.forEach(up -> endpoint.addUriParameter(up.getLeft(), up.getMiddle(), up.getRight()));
+		}
+		if (ramlPath != null) {
+			endpoint.setRAMLPath(ramlPath);
+		}
+		if (queryParameters != null) {
+			queryParameters.forEach(qp -> endpoint.addQueryParameter(qp.getLeft(), qp.getMiddle(), qp.getRight()));
+		}
+		if (queryParameterProviders != null) {
+			queryParameterProviders.forEach(qp -> endpoint.addQueryParameters(qp));
+		}
+		if (exampleRequestText != null) {
+			endpoint.exampleRequest(exampleRequestText);
+		}
+		if (mutating != null) {
+			endpoint.setMutating(mutating);
+		}
+		if (modelComponents != null) {
+			endpoint.setModel(modelComponents);
+		}
+		if (insecure != null) {
+			endpoint.setInsecure(insecure);
+		}
+		if (traits != null) {
+			endpoint.traits(traits);
+		}
+		if (exampleRequestJson != null) {
+			endpoint.exampleRequest(exampleRequestJson);
+		}
+		if (exampleRequestModel != null) {
+			endpoint.exampleRequest(exampleRequestModel);
+		}
+		if (exampleRequestParameters != null) {
+			endpoint.exampleRequest(exampleRequestParameters);
+		}
+		if (handler != null) {
+			endpoint.handler(handler);
+		}
+		if (blockingHandler != null) {
+			endpoint.blockingHandler(blockingHandler.getKey(), blockingHandler.getValue());
+		}
+		if (failureHandler != null) {
+			endpoint.failureHandler(failureHandler);
+		}
+		return endpoint;
 	}
 }
