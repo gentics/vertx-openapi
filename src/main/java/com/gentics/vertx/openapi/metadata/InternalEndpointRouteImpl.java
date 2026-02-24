@@ -124,14 +124,29 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	/**
 	 * Create a new endpoint wrapper using the provided router to create the wrapped
-	 * route instance.
+	 * route instance. This also adds this instance to the router metadata.
 	 *
 	 * @param router
-	 * @param localConfigApi
-	 * @param db
 	 */
 	public InternalEndpointRouteImpl(Router router) {
+		this(router, true);
+	}
+
+	/**
+	 * Create a new endpoint wrapper using the provided router to create the wrapped
+	 * route instance. Optionally add this instance to the router metadata.
+	 *
+	 * @param router
+	 * @param addToMetadata
+	 */
+	public InternalEndpointRouteImpl(Router router, boolean addToMetadata) {
 		this.route = router.route();
+		if (addToMetadata) {
+			addMeToMetadata();
+		}
+	}
+
+	public void addMeToMetadata() {
 		route.putMetadata(InternalEndpointRoute.class.getCanonicalName(), this);
 	}
 

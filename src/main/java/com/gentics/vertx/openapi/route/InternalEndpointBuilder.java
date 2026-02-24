@@ -28,7 +28,7 @@ public final class InternalEndpointBuilder {
 
 	private InternalEndpointBuilder(Router router) {
 		this.router = router;
-		this.endpoint = new InternalEndpointRouteImpl(router);
+		this.endpoint = new InternalEndpointRouteImpl(router, false);
 	}
 
 	/**
@@ -384,6 +384,7 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public Router build() {
+		endpoint.addMeToMetadata();
 		return router;
 	}
 }
