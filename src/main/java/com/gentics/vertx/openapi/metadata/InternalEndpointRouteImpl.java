@@ -99,7 +99,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	protected String ramlPath;
 
 	protected Boolean mutating;
-	protected boolean insecure = false;
+	protected Collection<String> securitySchemes;
 
 	static {
 		minifyingPrettyPrinter = new MinimalPrettyPrinter();
@@ -576,13 +576,13 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	}
 
 	@Override
-	public boolean isInsecure() {
-		return insecure;
+	public Collection<String> getSecuritySchemes() {
+		return securitySchemes;
 	}
 
 	@Override
-	public InternalEndpointRoute setInsecure(boolean insecure) {
-		this.insecure = insecure;
+	public InternalEndpointRoute setSecuritySchemes(Collection<String> securitySchemes) {
+		this.securitySchemes = securitySchemes;
 		return this;
 	}
 
@@ -615,6 +615,17 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	 */
 	public static ObjectMapper getMapper() {
 		return defaultMapper;
+	}
+
+	@Override
+	public boolean isInsecure() {
+		return securitySchemes == null || securitySchemes.size() < 1;
+	}
+
+	@Override
+	public InternalEndpointRoute setInsecure(boolean insecure) {
+		this.securitySchemes = null;
+		return this;
 	}
 }
 

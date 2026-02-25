@@ -2,6 +2,7 @@ package com.gentics.vertx.openapi.route;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -56,6 +57,7 @@ public final class InternalEndpointBuilder {
 	private Boolean mutating;
 	private Collection<Class<?>> modelComponents;
 	private Boolean insecure;
+	private Collection<String> secureWith;
 
 	private InternalEndpointBuilder(Router router) {
 		this.router = router;
@@ -416,6 +418,14 @@ public final class InternalEndpointBuilder {
 	 */
 	public InternalEndpointBuilder withModelComponents(Collection<Class<?>> modelComponents) {
 		this.modelComponents = modelComponents;
+		return this;
+	}
+
+	public InternalEndpointBuilder secureWith(String securityScheme) {
+		if (this.secureWith == null) {
+			this.secureWith = new HashSet<>(1);
+		}
+		this.secureWith.add(securityScheme);
 		return this;
 	}
 	/**

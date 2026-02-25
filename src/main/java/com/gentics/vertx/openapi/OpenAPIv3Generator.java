@@ -42,6 +42,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.fasterxml.jackson.databind.JsonSerializable;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.gentics.vertx.openapi.metadata.InternalEndpointRoute;
+import com.gentics.vertx.openapi.model.ExtendedSecurityScheme;
 import com.gentics.vertx.openapi.model.Format;
 import com.gentics.vertx.openapi.model.InParameter;
 import com.gentics.vertx.openapi.model.OpenAPIGenerationException;
@@ -79,11 +80,13 @@ public class OpenAPIv3Generator {
 
 	private static final Logger log = LoggerFactory.getLogger(OpenAPIv3Generator.class);
 
-	private final Optional<? extends Collection<Pattern>> maybePathBlacklist;
-	private final Optional<? extends Collection<Pattern>> maybePathWhitelist;
+	protected final Optional<? extends Collection<Pattern>> maybePathBlacklist;
+	protected final Optional<? extends Collection<Pattern>> maybePathWhitelist;
 
-	private final List<String> servers;
-	private final String version;
+	protected final List<String> servers;
+	protected final String version;
+
+	protected Map<String, ExtendedSecurityScheme> security;
 
 	/**
 	 * Ctor
@@ -95,10 +98,25 @@ public class OpenAPIv3Generator {
 	public OpenAPIv3Generator(String version, List<String> servers, 
 			@Nonnull Optional<? extends Collection<Pattern>> maybePathBlacklist, 
 			@Nonnull Optional<? extends Collection<Pattern>> maybePathWhitelist) {
+		this(version, servers, null, maybePathBlacklist, maybePathWhitelist);
+	}
+
+	/**
+	 * Ctor
+	 * 
+	 * @param servers a list of available servers; may be empty.
+	 * @param maybePathBlacklist optional regex for API path blacklist
+	 * @param maybePathWhitelist optional regex for API path whitelist
+	 */
+	public OpenAPIv3Generator(String version, List<String> servers, 
+			@Nonnull Map<String, ExtendedSecurityScheme> security,
+			@Nonnull Optional<? extends Collection<Pattern>> maybePathBlacklist, 
+			@Nonnull Optional<? extends Collection<Pattern>> maybePathWhitelist) {
 		this.maybePathBlacklist = maybePathBlacklist;
 		this.maybePathWhitelist = maybePathWhitelist;
 		this.servers = servers;
 		this.version = version;
+		this.security = security;
 	}
 
 	/**
@@ -114,7 +132,7 @@ public class OpenAPIv3Generator {
 	public String generate(Map<Router, String> routers, Format format, boolean pretty, 
 			@Nonnull Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer,
 			@Nonnull Optional<Supplier<Collection<Class<?>>>> maybeExtraComponentSupplier) throws OpenAPIGenerationException {
-		return generate(routers, format, pretty, false, maybePathItemTransformer, maybeExtraComponentSupplier);
+		return generate("Created with Gentics Vert.x OpenAPI generator", routers, format, pretty, false, maybePathItemTransformer, maybeExtraComponentSupplier);
 	}
 
 	/**
@@ -128,14 +146,14 @@ public class OpenAPIv3Generator {
 	 * @return the generated spec text
 	 * @throws OpenAPIGenerationException 
 	 */
-	public String generate(Map<Router, String> routers, Format format, boolean pretty, boolean useVersion31, 
+	public String generate(String name, Map<Router, String> routers, Format format, boolean pretty, boolean useVersion31, 
 			@Nonnull Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer,
 			@Nonnull Optional<Supplier<Collection<Class<?>>>> maybeExtraComponentSupplier) throws OpenAPIGenerationException {
 		log.info("Starting OpenAPIv3 generation...");
 		OpenAPI openApi = new OpenAPI();
 		openApi.setPaths(new Paths());
 		Info info = new Info();
-		info.setTitle("Gentics Mesh REST API");
+		info.setTitle(name);
 		info.setVersion(version);
 
 		openApi.servers(servers.stream().map(url -> {
@@ -167,7 +185,24 @@ public class OpenAPIv3Generator {
 	 * 
 	 * @param openApi
 	 */
-	protected void addSecurity(OpenAPI openApi) {	
+	protected void addSecurity(OpenAPI openApi) {
+		if (security != null) {
+			Components components;
+			if (openApi.getComponents() == null) {
+				components = new Components();
+				openApi.setComponents(components);
+			} else {
+				components = openApi.getComponents();
+			}
+			security.entrySet().forEach(e -> {
+				components.addSecuritySchemes(e.getKey(), e.getValue().getScheme());
+				if (e.getValue().isGlobal()) {
+					SecurityRequirement req = new SecurityRequirement();
+					req.addList(e.getKey());
+					openApi.addSecurityItem(req);
+				}
+			});
+		}
 	}
 
 	/**
@@ -268,12 +303,12 @@ public class OpenAPIv3Generator {
 		if (method == null) {
 			method = HttpMethod.GET;
 		}
-		if (endpoint.isInsecure()) {
-			operation.setSecurity(Collections.emptyList());
-		} else {
-			SecurityRequirement reqBearerAuth = new SecurityRequirement();
-			reqBearerAuth.addList("bearerAuth");
-			operation.setSecurity(List.of(reqBearerAuth));
+		if (endpoint.getSecuritySchemes() != null) {
+			operation.setSecurity(endpoint.getSecuritySchemes().stream().map(scheme -> {
+				SecurityRequirement req = new SecurityRequirement();
+				req.addList(scheme);
+				return req;
+			}).collect(Collectors.toList()));
 		}
 		resolveMethod(method.name(), pathItem, operation);
 		List<Stream<Parameter>> params = List.of(

@@ -423,18 +423,36 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	InternalEndpointRoute setMutating(Boolean mutating);
 
 	/**
-	 * If true, the endpoint can be used with no authentication. 
+	 * Set the security schemes for this route
+	 * 
+	 * @param securitySchemes
+	 * @return
+	 */
+	InternalEndpointRoute setSecuritySchemes(Collection<String> securitySchemes);
+
+	/**
+	 * Get the security schemes for this route
 	 * 
 	 * @return
 	 */
+	Collection<String> getSecuritySchemes();
+
+	/**
+	 * If true, the endpoint can be used with no authentication. 
+	 * @deprecated Use {@link InternalEndpointRoute#getSecuritySchemes()} to get more fine grained security
+	 * @return
+	 */
+	@Deprecated
 	boolean isInsecure();
 
 	/**
 	 * Set the endpoint to omit the secure token requirement.
 	 * 
+	 * @deprecated Use {@link InternalEndpointRoute#setSecuritySchemes(Collection)} for more fine grained security
 	 * @param insecure
 	 * @return
 	 */
+	@Deprecated
 	InternalEndpointRoute setInsecure(boolean insecure);
 
 	/**
