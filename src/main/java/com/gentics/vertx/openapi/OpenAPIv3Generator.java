@@ -88,6 +88,8 @@ public class OpenAPIv3Generator {
 
 	protected Map<String, ExtendedSecurityScheme> security;
 
+	protected boolean useFullPackageForComponentName = false;
+
 	/**
 	 * Ctor
 	 * 
@@ -181,6 +183,36 @@ public class OpenAPIv3Generator {
 	}
 
 	/**
+	 * Should the full class names be used for the component model name?
+	 * @return
+	 */
+	public boolean isUseFullPackageForComponentName() {
+		return useFullPackageForComponentName;
+	}
+
+	/**
+	 * Set to use full class names for the component model name.
+	 * @param useFullPackageForComponentName
+	 */
+	public void setUseFullPackageForComponentName(boolean useFullPackageForComponentName) {
+		this.useFullPackageForComponentName = useFullPackageForComponentName;
+	}
+
+	/**
+	 * Make the component model name out of this class.
+	 * 
+	 * @param cls
+	 * @return
+	 */
+	protected String getComponentName(Class<?> cls) {
+		if (isUseFullPackageForComponentName()) {
+			return cls.getCanonicalName().replace(".", "_");
+		} else {
+			return cls.getSimpleName();
+		}
+	}
+
+	/**
 	 * Add a security to the spec
 	 * 
 	 * @param openApi
@@ -213,16 +245,17 @@ public class OpenAPIv3Generator {
 	 */
 	@SuppressWarnings("rawtypes")
 	protected void fillComponent(Class<?> cls, OpenAPI openApi) {
-		if (StringUtils.isBlank(cls.getSimpleName())) {
+		String componentName = getComponentName(cls);
+		if (StringUtils.isBlank(componentName)) {
 			return;
 		}
 		Components components = openApi.getComponents();
 		if (components.getSchemas() == null) {
 			components.setSchemas(new HashMap<>(Map.of("AnyJson", new Schema<String>())));
 		}
-		Schema<?> schema = components.getSchemas().getOrDefault(cls.getSimpleName(), new Schema<String>());
+		Schema<?> schema = components.getSchemas().getOrDefault(componentName, new Schema<String>());
 		schema.setType("object");
-		schema.setName(cls.getSimpleName());
+		schema.setName(componentName);
 		List<Stream<Field>> fieldStreams = new ArrayList<>();
 		final List<Type> generics = new ArrayList<>();
 		generics.addAll(Arrays.asList(ParameterizedType.class.isInstance(cls) ? ParameterizedType.class.cast(cls).getActualTypeArguments() : new Type[0]));
@@ -275,7 +308,7 @@ public class OpenAPIv3Generator {
 				if (jdes != null && jdes.as() != null) {
 					t = jdes.as();
 					fieldSchema.setType("object");
-					fieldSchema.set$ref("#/components/schemas/" + t.getSimpleName());
+					fieldSchema.set$ref("#/components/schemas/" + getComponentName(t));
 				} else {
 					generics.addAll(Arrays.asList(ParameterizedType.class.isInstance(f.getGenericType()) ? ParameterizedType.class.cast(f.getGenericType()).getActualTypeArguments() : new Type[0]));
 					if (generics.size() > 0) {
@@ -287,7 +320,7 @@ public class OpenAPIv3Generator {
 				return new UnmodifiableMapEntry<>(name, fieldSchema);
 			}).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 		schema.setProperties(properties);
-		components.addSchemas(cls.getSimpleName(), schema);
+		components.addSchemas(componentName, schema);
 	}
 
 	/**
@@ -297,7 +330,7 @@ public class OpenAPIv3Generator {
 	 * @param pathItem
 	 * @param endpoint
 	 */
-	protected void resolveEndpointRoute(String path, PathItem pathItem, InternalEndpointRoute endpoint) {
+	protected void resolveEndpointRoute(String path, PathItem pathItem, InternalEndpointRoute endpoint, OpenAPI openApi) {
 		Operation operation = new Operation();
 		HttpMethod method = endpoint.getMethod();
 		if (method == null) {
@@ -351,6 +384,7 @@ public class OpenAPIv3Generator {
 					mediaType.setExample(e.getValue());
 					responseBody.addMediaType("*/*", mediaType);
 					response.setContent(responseBody);
+					fillComponent(ref, openApi);
 				}							
 				return new UnmodifiableMapEntry<Integer, ApiResponse>(e.getKey(), response);
 			}).filter(Objects::nonNull).forEach(e -> responses.addApiResponse(Integer.toString(e.getKey()), e.getValue()));
@@ -359,7 +393,7 @@ public class OpenAPIv3Generator {
 			RequestBody requestBody = new RequestBody();
 			Content content = new Content();
 			endpoint.getExampleRequestMap().entrySet().stream().filter(e -> Objects.nonNull(e.getValue()))
-					.map(e -> fillMediaType(e.getKey(), e.getValue(), endpoint.getExampleRequestClass()))
+					.map(e -> fillMediaType(e.getKey(), e.getValue(), endpoint.getExampleRequestClass(), openApi))
 					.filter(Objects::nonNull).forEach(e -> content.addMediaType(e.getKey(), e.getValue()));
 			requestBody.setContent(content);
 			operation.setRequestBody(requestBody);
@@ -462,7 +496,7 @@ public class OpenAPIv3Generator {
 				pathItem.setSummary(endpoint.getDisplayName());
 				pathItem.setDescription(endpoint.getDescription());
 				endpoint.getModel().forEach(modelComponent -> fillComponent(modelComponent, consumer));
-				resolveEndpointRoute(path, pathItem, endpoint);
+				resolveEndpointRoute(path, pathItem, endpoint, consumer);
 			}, () -> {
 				resolveFallbackRoute(route, pathItem);
 			});
@@ -520,10 +554,11 @@ public class OpenAPIv3Generator {
 	 * @param key
 	 * @param mimeType
 	 * @param refClass
+	 * @param openApi 
 	 * @return
 	 */
 	@SuppressWarnings("rawtypes")
-	protected Map.Entry<String, MediaType> fillMediaType(String key, MimeType mimeType, Class<?> refClass) {
+	protected Map.Entry<String, MediaType> fillMediaType(String key, MimeType mimeType, Class<?> refClass, OpenAPI openApi) {
 		MediaType mediaType = new MediaType();
 		mediaType.setExample(mimeType.getExample());
 		if (mimeType.getFormParameters() != null) {
@@ -541,6 +576,7 @@ public class OpenAPIv3Generator {
 			schema.set$id(jschema.getString("id"));
 			schema.set$ref("#/components/schemas/" + refClass.getSimpleName());
 			mediaType.setSchema(schema);
+			fillComponent(refClass, openApi);
 			return new UnmodifiableMapEntry<String, MediaType>(key, mediaType);
 		} else if (refClass != null && refClass.getSimpleName().toLowerCase().startsWith("json")) {
 			mediaType.setExample(mimeType.getExample());

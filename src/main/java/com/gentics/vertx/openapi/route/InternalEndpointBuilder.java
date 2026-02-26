@@ -33,14 +33,11 @@ public final class InternalEndpointBuilder {
 	private HttpMethod method;
 	private Integer order;
 	private String consumes;
-	private Handler<RoutingContext> handler;
 	private Router subRouter;
 	private Boolean useNormalisedPath;
 	private Pair<HttpResponseStatus, String> exampleResponse;
 	private Triple<HttpResponseStatus, Object, String> exampleResponseModel;
 	private Object[] exampleResponseHeader;
-	private Pair<Handler<RoutingContext>, Boolean> blockingHandler;
-	private Handler<RoutingContext> failureHandler;
 	private String produces;
 	private String pathRegex;
 	private String displayName;
@@ -53,6 +50,9 @@ public final class InternalEndpointBuilder {
 	private JsonObject exampleRequestJson;
 	private RestModel exampleRequestModel;
 	private Map<String, List<FormParameter>> exampleRequestParameters;
+	private List<Handler<RoutingContext>> handlers;
+	private List<Pair<Handler<RoutingContext>, Boolean>> blockingHandlers;
+	private List<Handler<RoutingContext>> failureHandlers;
 	private String exampleRequestText;
 	private Boolean mutating;
 	private Collection<Class<?>> modelComponents;
@@ -125,7 +125,10 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withHandler(Handler<RoutingContext> requestHandler) {
-		this.handler = requestHandler;
+		if (this.handlers == null) {
+			this.handlers = new ArrayList<>(1);
+		}
+		this.handlers.add(requestHandler);
 		return this;
 	}
 
@@ -208,7 +211,10 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withBlockingHandler(Handler<RoutingContext> requestHandler, boolean ordered) {
-		this.blockingHandler = Pair.of(requestHandler, ordered);
+		if (this.blockingHandlers == null) {
+			this.blockingHandlers = new ArrayList<>(1);
+		}
+		this.blockingHandlers.add(Pair.of(requestHandler, ordered));
 		return this;
 	}
 
@@ -219,7 +225,10 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withFailureHandler(Handler<RoutingContext> failureHandler) {
-		this.failureHandler = failureHandler;
+		if (this.failureHandlers == null) {
+			this.failureHandlers = new ArrayList<>(1);
+		}
+		this.failureHandlers.add(failureHandler);
 		return this;
 	}
 
@@ -510,14 +519,14 @@ public final class InternalEndpointBuilder {
 		if (exampleRequestParameters != null) {
 			endpoint.exampleRequest(exampleRequestParameters);
 		}
-		if (handler != null) {
-			endpoint.handler(handler);
+		if (handlers != null) {
+			handlers.forEach(handler -> endpoint.handler(handler));
 		}
-		if (blockingHandler != null) {
-			endpoint.blockingHandler(blockingHandler.getKey(), blockingHandler.getValue());
+		if (blockingHandlers != null) {
+			blockingHandlers.forEach(blockingHandler -> endpoint.blockingHandler(blockingHandler.getKey(), blockingHandler.getValue()));
 		}
-		if (failureHandler != null) {
-			endpoint.failureHandler(failureHandler);
+		if (failureHandlers != null) {
+			failureHandlers.forEach(failureHandler -> endpoint.failureHandler(failureHandler));
 		}
 		return endpoint;
 	}
