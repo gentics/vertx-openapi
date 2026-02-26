@@ -332,6 +332,10 @@ public class OpenAPIv3Generator {
 	 */
 	protected void resolveEndpointRoute(String path, PathItem pathItem, InternalEndpointRoute endpoint, OpenAPI openApi) {
 		Operation operation = new Operation();
+		if (endpoint.isHidden()) {
+			log.debug("Path {} is marked as hidden and skipped", path);
+			return;
+		}
 		HttpMethod method = endpoint.getMethod();
 		if (method == null) {
 			method = HttpMethod.GET;
@@ -468,7 +472,12 @@ public class OpenAPIv3Generator {
 	protected void addRoute(String parent, Route route, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer) throws IOException {
 		String rawPath = route.getPath();
 		if (StringUtils.isBlank(rawPath)) {
-			return;
+			InternalEndpointRoute internalRoute = (InternalEndpointRoute) route.metadata().get(InternalEndpointRoute.class.getCanonicalName());
+			if (route.isRegexPath() && internalRoute != null && StringUtils.isNotBlank(internalRoute.getRamlPath()) ) {
+				rawPath = internalRoute.getRamlPath();
+			} else {
+				return;
+			}
 		}
 		String path = (parent + (Strings.CI.equals(rawPath, "/") ? "/" : Arrays.stream(rawPath.split("/"))
 					.map(segment -> segment.startsWith(":") ? ("{" + segment.substring(1) + "}") : segment)
@@ -700,7 +709,7 @@ public class OpenAPIv3Generator {
 	 * @return
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private final Parameter parameter(String name, AbstractParam param, InParameter inType) {
+	protected final Parameter parameter(String name, AbstractParam param, InParameter inType) {
 		Schema schema;
 		switch (param.getType()) {
 		case BOOLEAN:

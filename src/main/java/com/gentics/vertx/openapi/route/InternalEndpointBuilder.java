@@ -9,6 +9,7 @@ import java.util.Map;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.Triple;
 import org.raml.model.parameter.FormParameter;
+import org.raml.model.parameter.QueryParameter;
 
 import com.gentics.vertx.openapi.metadata.InternalEndpointRoute;
 import com.gentics.vertx.openapi.metadata.InternalEndpointRouteImpl;
@@ -55,9 +56,11 @@ public final class InternalEndpointBuilder {
 	private List<Handler<RoutingContext>> failureHandlers;
 	private String exampleRequestText;
 	private Boolean mutating;
+	private Boolean hidden;
 	private Collection<Class<?>> modelComponents;
 	private Boolean insecure;
 	private Collection<String> secureWith;
+	private ArrayList<Pair<String, QueryParameter>> queryParameterModels;
 
 	private InternalEndpointBuilder(Router router) {
 		this.router = router;
@@ -304,6 +307,14 @@ public final class InternalEndpointBuilder {
 		return this;
 	}
 
+	public InternalEndpointBuilder withQueryParameter(String name, QueryParameter parameter) {
+		if (this.queryParameterModels == null) {
+			this.queryParameterModels = new ArrayList<Pair<String, QueryParameter>>(10);
+		}
+		this.queryParameterModels.add(Pair.of(name, parameter));
+		return this;
+	}
+
 	/**
 	 * 
 	 * @param name
@@ -420,6 +431,17 @@ public final class InternalEndpointBuilder {
 	}
 
 	/**
+	 * Mark this endpoint as hidden from OpenAPI spec generator
+	 * 
+	 * @param hidden
+	 * @return
+	 */
+	public InternalEndpointBuilder hidden(boolean hidden) {
+		this.hidden = hidden;
+		return this;
+	}
+
+	/**
 	 * Set the custom model components, additionally required for this route
 	 * 
 	 * @param modelComponents
@@ -492,6 +514,9 @@ public final class InternalEndpointBuilder {
 		if (queryParameters != null) {
 			queryParameters.forEach(qp -> endpoint.addQueryParameter(qp.getLeft(), qp.getMiddle(), qp.getRight()));
 		}
+		if (queryParameterModels != null) {
+			queryParameterModels.forEach(qm -> endpoint.addQueryParameter(qm.getKey(), qm.getValue()));
+		}
 		if (queryParameterProviders != null) {
 			queryParameterProviders.forEach(qp -> endpoint.addQueryParameters(qp));
 		}
@@ -506,6 +531,9 @@ public final class InternalEndpointBuilder {
 		}
 		if (insecure != null) {
 			endpoint.setInsecure(insecure);
+		}
+		if (hidden != null) {
+			endpoint.setHidden(hidden);
 		}
 		if (traits != null) {
 			endpoint.traits(traits);

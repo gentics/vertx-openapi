@@ -1,5 +1,6 @@
 package com.gentics.vertx.openapi.metadata;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -283,13 +284,32 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	InternalEndpointRoute setRAMLPath(String path);
 
 	/**
+	 * Add new query parameter.
+	 * 
+	 * @param name
+	 * @param parameter
+	 * @return
+	 */
+	InternalEndpointRoute addQueryParameter(String name, QueryParameter parameter);
+
+	/**
+	 * Add new query parameter.
 	 * 
 	 * @param name
 	 * @param description
 	 * @param example
 	 * @return
 	 */
-	InternalEndpointRoute addQueryParameter(String name, String description, String example);
+	default InternalEndpointRoute addQueryParameter(String name, String description, String example) {
+		QueryParameter param = new QueryParameter();
+		param.setDescription(description);
+		param.setRequired(false);
+		if (example != null) {
+			param.setExample(example);
+		}
+		addQueryParameter(name, param);
+		return this;
+	}
 
 	/**
 	 * Add a query parameter provider to the endpoint. The query parameter provider will in turn provide examples, descriptions for all query parameters which
@@ -299,7 +319,15 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	 *            Class which provides the parameters
 	 * @return Fluent API
 	 */
-	InternalEndpointRoute addQueryParameters(Class<? extends ParameterProvider> clazz);
+	default InternalEndpointRoute addQueryParameters(Class<? extends ParameterProvider> clazz) {
+		try {
+			ParameterProvider provider = clazz.getConstructor().newInstance();
+			provider.getRAMLParameters().entrySet().forEach(e -> addQueryParameter(e.getKey(), e.getValue()));
+		} catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException | SecurityException e) {
+			e.printStackTrace();
+		}
+		return this;
+	}
 
 	/**
 	 * Return the list of query parameters for the endpoint.
@@ -490,4 +518,18 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	 * @return
 	 */
 	Collection<Class<?>> getModel();
+
+	/**
+	 * Is this endpoint hidden from the spec generator?
+	 * 
+	 * @return
+	 */
+	boolean isHidden();
+
+	/**
+	 * Mark this endpoint as hidden from the spec generator
+	 * 
+	 * @param hidden
+	 */
+	void setHidden(boolean hidden);
 }

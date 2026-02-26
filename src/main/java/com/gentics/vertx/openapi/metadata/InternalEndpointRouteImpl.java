@@ -101,6 +101,8 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	protected Boolean mutating;
 	protected Collection<String> securitySchemes;
 
+	private boolean hidden;
+
 	static {
 		minifyingPrettyPrinter = new MinimalPrettyPrinter();
 
@@ -481,12 +483,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	}
 
 	@Override
-	public InternalEndpointRoute addQueryParameter(String name, String description, String example) {
-		QueryParameter param = new QueryParameter();
-		param.setDescription(description);
-		if (example != null) {
-			param.setExample(example);
-		}
+	public InternalEndpointRoute addQueryParameter(String name, QueryParameter param) {
 		parameters.put(name, param);
 		return this;
 	}
@@ -507,6 +504,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 		UriParameter param = new UriParameter(key);
 		param.setDescription(description);
 		param.setExample(example);
+		param.setRequired(true);
 		uriParameters.put(key, param);
 		return this;
 	}
@@ -630,6 +628,16 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	public InternalEndpointRoute setInsecure(boolean insecure) {
 		this.securitySchemes = null;
 		return this;
+	}
+
+	@Override
+	public void setHidden(boolean hidden) {
+		this.hidden = hidden;
+	}
+
+	@Override
+	public boolean isHidden() {
+		return hidden;
 	}
 }
 
