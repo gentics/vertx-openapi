@@ -300,10 +300,6 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public String getRamlPath() {
-		if (pathRegex != null) {
-			return pathRegex;
-		}
-
 		if (ramlPath == null) {
 			return convertPath(route.getPath());
 		}
