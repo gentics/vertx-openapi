@@ -316,11 +316,6 @@ public class OpenAPIv3Generator {
 				Schema<?> fieldSchema = new Schema<String>();
 				fieldSchema.setName(name);
 
-				Boolean filledAndRequired = fillComponentFromAnnotation(f, fieldSchema);
-				if (filledAndRequired != null && filledAndRequired) {
-					schema.addRequiredItem(name);
-				}
-
 				JsonProperty property = f.getAnnotation(JsonProperty.class);
 				if (property != null) {
 					if (StringUtils.isNotBlank(property.defaultValue())) {
@@ -344,7 +339,11 @@ public class OpenAPIv3Generator {
 					if (generics.size() > 0) {
 						log.debug(" - Generics: " + Arrays.toString(generics.toArray()));
 					}
-					fillType(components, t, fieldSchema, generics, openApi);
+					fillType(t, fieldSchema, generics, openApi);
+				}
+				Boolean filledAndRequired = fillComponentFromAnnotation(f, fieldSchema);
+				if (filledAndRequired != null && filledAndRequired) {
+					schema.addRequiredItem(name);
 				}
 				fieldSchema.setTypes(Collections.singleton(fieldSchema.getType()));
 				return new UnmodifiableMapEntry<>(name, fieldSchema);
@@ -662,7 +661,7 @@ public class OpenAPIv3Generator {
 	 * @param generics
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private void fillType(Components components, Class<?> modelClass, Schema fieldSchema, List<Type> generics, OpenAPI openApi) {
+	private void fillType(Class<?> modelClass, Schema fieldSchema, List<Type> generics, OpenAPI openApi) {
 		if (modelClass.isPrimitive() || Number.class.isAssignableFrom(modelClass) || Boolean.class.isAssignableFrom(modelClass)) {
 			if (int.class.isAssignableFrom(modelClass) || Integer.class.isAssignableFrom(modelClass)) {
 				fieldSchema.setType("integer");
@@ -690,13 +689,13 @@ public class OpenAPIv3Generator {
 			Schema<?> itemSchema = new Schema<String>();
 			if (modelClass.isArray()) {
 				List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-				fillType(components, modelClass.getComponentType(), itemSchema, generics1, openApi);
+				fillType(modelClass.getComponentType(), itemSchema, generics1, openApi);
 			} else {
 				generics.stream().forEach(gen -> {
 					if (Class.class.isInstance(gen)) {
 						Class<?> itemClass = Class.class.cast(gen);
 						List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-						fillType(components, itemClass, itemSchema, generics1, openApi);
+						fillType(itemClass, itemSchema, generics1, openApi);
 						if (!itemClass.isPrimitive() && !itemClass.getCanonicalName().startsWith("java.")) {
 							fillComponent(itemClass, openApi);
 						}
@@ -713,7 +712,7 @@ public class OpenAPIv3Generator {
 				Schema enumSchema = new Schema<String>();
 				enumSchema.setType("string");
 				enumSchema.setEnum(Arrays.stream(modelClass.getEnumConstants()).map(e -> e.toString().toLowerCase()).collect(Collectors.toList()));
-				components.addSchemas(modelClass.getSimpleName(), enumSchema);
+				openApi.getComponents().addSchemas(modelClass.getSimpleName(), enumSchema);
 			}
 			if (Map.class.isAssignableFrom(modelClass)) {
 				if (generics.size() == 2) {
