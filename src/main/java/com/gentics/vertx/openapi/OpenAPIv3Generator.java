@@ -291,6 +291,18 @@ public class OpenAPIv3Generator {
 				if (description != null) {
 					fieldSchema.setDescription(description.value());
 				}
+				io.swagger.v3.oas.annotations.media.Schema swaggerSchema = f.getAnnotation(io.swagger.v3.oas.annotations.media.Schema.class);
+				if (swaggerSchema != null) {
+					if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.description())) {
+						fieldSchema.setDescription(swaggerSchema.description());
+					}
+					if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.example())) {
+						fieldSchema.setExample(swaggerSchema.example());
+					}
+					if (swaggerSchema.requiredMode() == io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED || swaggerSchema.required()) {
+						schema.addRequiredItem(name);
+					}
+				}
 				JsonProperty property = f.getAnnotation(JsonProperty.class);
 				if (property != null) {
 					if (StringUtils.isNotBlank(property.defaultValue())) {
@@ -314,7 +326,7 @@ public class OpenAPIv3Generator {
 					if (generics.size() > 0) {
 						log.debug(" - Generics: " + Arrays.toString(generics.toArray()));
 					}
-					fillType(components, t, fieldSchema, generics);
+					fillType(components, t, fieldSchema, generics, openApi);
 				}
 				fieldSchema.setTypes(Collections.singleton(fieldSchema.getType()));
 				return new UnmodifiableMapEntry<>(name, fieldSchema);
@@ -385,8 +397,34 @@ public class OpenAPIv3Generator {
 					schema.set$ref("#/components/schemas/" + ref.getSimpleName());
 					MediaType mediaType = new MediaType();
 					mediaType.setSchema(schema);
-					mediaType.setExample(e.getValue());
-					responseBody.addMediaType("*/*", mediaType);
+					if (e.getValue() != null && e.getValue().getBody() != null) {
+						org.raml.model.MimeType bodyMime = e.getValue().getBody().get("application/json");
+						if (bodyMime == null) {
+							bodyMime = e.getValue().getBody().get("text/plain");
+						}
+						if (bodyMime != null) {
+							String exampleText = bodyMime.getExample();
+							if (exampleText != null) {
+								exampleText = exampleText.trim();
+								try {
+									if (exampleText.startsWith("{")) {
+										mediaType.setExample(new io.vertx.core.json.JsonObject(exampleText).getMap());
+									} else if (exampleText.startsWith("[")) {
+										mediaType.setExample(new io.vertx.core.json.JsonArray(exampleText).getList());
+									} else {
+										mediaType.setExample(exampleText);
+									}
+								} catch (Exception ex) {
+									mediaType.setExample(exampleText);
+								}
+							}
+						} else {
+							mediaType.setExample(e.getValue());
+						}
+					} else {
+						mediaType.setExample(e.getValue());
+					}
+					responseBody.addMediaType("application/json", mediaType);
 					response.setContent(responseBody);
 					fillComponent(ref, openApi);
 				}							
@@ -607,7 +645,7 @@ public class OpenAPIv3Generator {
 	 * @param generics
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private void fillType(Components components, Class<?> modelClass, Schema fieldSchema, List<Type> generics) {
+	private void fillType(Components components, Class<?> modelClass, Schema fieldSchema, List<Type> generics, OpenAPI openApi) {
 		if (modelClass.isPrimitive() || Number.class.isAssignableFrom(modelClass) || Boolean.class.isAssignableFrom(modelClass)) {
 			if (int.class.isAssignableFrom(modelClass) || Integer.class.isAssignableFrom(modelClass)) {
 				fieldSchema.setType("integer");
@@ -635,11 +673,14 @@ public class OpenAPIv3Generator {
 			Schema<?> itemSchema = new Schema<String>();
 			if (modelClass.isArray()) {
 				List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-				fillType(components, modelClass.getComponentType(), itemSchema, generics1);
+				fillType(components, modelClass.getComponentType(), itemSchema, generics1, openApi);
 			} else if (generics.size() > 0 && Class.class.isInstance(generics.get(0))) {
 				Class<?> itemClass = Class.class.cast(generics.get(0));
 				List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-				fillType(components, itemClass, itemSchema, generics1);
+				fillType(components, itemClass, itemSchema, generics1, openApi);
+				if (!itemClass.isPrimitive() && !itemClass.getCanonicalName().startsWith("java.lang")) {
+					fillComponent(itemClass, openApi);
+				}
 			} else {
 				// TODO
 				log.error("Unknown array type" + modelClass + " / " + Arrays.toString(generics.toArray()));
@@ -693,6 +734,8 @@ public class OpenAPIv3Generator {
 				}
 			} else if (JsonObject.class.isAssignableFrom(modelClass) || JsonSerializable.class.isAssignableFrom(modelClass)) {
 				fieldSchema.set$ref("#/components/schemas/AnyJson");
+			} else if (modelClass.equals(Object.class)) {
+				fieldSchema.setType("object");
 			} else {
 				fieldSchema.setType("object");
 				fieldSchema.set$ref("#/components/schemas/" + modelClass.getSimpleName());
