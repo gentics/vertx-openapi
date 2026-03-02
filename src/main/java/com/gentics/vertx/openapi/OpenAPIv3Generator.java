@@ -6,6 +6,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -246,16 +247,18 @@ public class OpenAPIv3Generator {
 	@SuppressWarnings("rawtypes")
 	protected void fillComponent(Class<?> cls, OpenAPI openApi) {
 		String componentName = getComponentName(cls);
-		if (StringUtils.isBlank(componentName)) {
-			return;
-		}
 		Components components = openApi.getComponents();
 		if (components.getSchemas() == null) {
 			components.setSchemas(new HashMap<>(Map.of("AnyJson", new Schema<String>())));
 		}
-		Schema<?> schema = components.getSchemas().getOrDefault(componentName, new Schema<String>());
+		if (StringUtils.isBlank(componentName) || components.getSchemas().containsKey(componentName)) {
+			return;
+		}
+		log.debug("Requesting component " + componentName);
+		Schema<?> schema = components.getSchemas().computeIfAbsent(componentName, name -> new Schema<String>());
 		schema.setType("object");
 		schema.setName(componentName);
+
 		List<Stream<Field>> fieldStreams = new ArrayList<>();
 		final List<Type> generics = new ArrayList<>();
 		generics.addAll(Arrays.asList(ParameterizedType.class.isInstance(cls) ? ParameterizedType.class.cast(cls).getActualTypeArguments() : new Type[0]));
@@ -278,7 +281,7 @@ public class OpenAPIv3Generator {
 		Map<String, Schema> properties = fieldStreams.stream().flatMap(Function.identity())
 			.filter(f -> !Modifier.isStatic(f.getModifiers())).peek(f -> {
 				Class<?> t = f.getType();
-				if (!t.isPrimitive() && !t.getCanonicalName().startsWith("java.lang")) {
+				if (!t.isPrimitive() && !t.getCanonicalName().startsWith("java.lang") && !t.getCanonicalName().startsWith("java.lang")) {
 					fillComponent(t, openApi);
 				}
 			})
@@ -332,7 +335,6 @@ public class OpenAPIv3Generator {
 				return new UnmodifiableMapEntry<>(name, fieldSchema);
 			}).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 		schema.setProperties(properties);
-		components.addSchemas(componentName, schema);
 	}
 
 	/**
@@ -674,16 +676,21 @@ public class OpenAPIv3Generator {
 			if (modelClass.isArray()) {
 				List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
 				fillType(components, modelClass.getComponentType(), itemSchema, generics1, openApi);
-			} else if (generics.size() > 0 && Class.class.isInstance(generics.get(0))) {
-				Class<?> itemClass = Class.class.cast(generics.get(0));
-				List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-				fillType(components, itemClass, itemSchema, generics1, openApi);
-				if (!itemClass.isPrimitive() && !itemClass.getCanonicalName().startsWith("java.lang")) {
-					fillComponent(itemClass, openApi);
-				}
 			} else {
-				// TODO
-				log.error("Unknown array type" + modelClass + " / " + Arrays.toString(generics.toArray()));
+				generics.stream().forEach(gen -> {
+					if (Class.class.isInstance(gen)) {
+						Class<?> itemClass = Class.class.cast(gen);
+						List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
+						fillType(components, itemClass, itemSchema, generics1, openApi);
+						if (!itemClass.isPrimitive() && !itemClass.getCanonicalName().startsWith("java.")) {
+							fillComponent(itemClass, openApi);
+						}
+					} else if (TypeVariable.class.isInstance(gen)) {
+						log.warn("Generic unimplemented type {} / {}", modelClass, gen);
+					} else {
+						log.error("Unknown generic array type: {} / {}",  modelClass, Arrays.toString(generics.toArray()));
+					}
+				});				
 			}
 			fieldSchema.setItems(itemSchema);
 		} else {

@@ -131,25 +131,32 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	 * @param router
 	 */
 	public InternalEndpointRouteImpl(Router router) {
-		this(router, true);
+		this(router, true, Optional.empty());
 	}
 
 	/**
 	 * Create a new endpoint wrapper using the provided router to create the wrapped
-	 * route instance. Optionally add this instance to the router metadata.
+	 * route instance with or without a specified path. Optionally add this instance to the router metadata.
 	 *
 	 * @param router
 	 * @param addToMetadata
+	 * @param optional route path
 	 */
-	public InternalEndpointRouteImpl(Router router, boolean addToMetadata) {
-		this.route = router.route();
+	public InternalEndpointRouteImpl(Router router, boolean addToMetadata, Optional<String> maybeRoute) {
+		this.route = maybeRoute.map(router::route).orElseGet(router::route);
 		if (addToMetadata) {
 			addMeToMetadata();
 		}
 	}
 
-	public void addMeToMetadata() {
+	/**
+	 * Add this endpoint instance to the wrapped Vert.x route's metadata 
+	 * 
+	 * @return
+	 */
+	public InternalEndpointRoute addMeToMetadata() {
 		route.putMetadata(InternalEndpointRoute.class.getCanonicalName(), this);
+		return this;
 	}
 
 	@Override
