@@ -239,6 +239,31 @@ public class OpenAPIv3Generator {
 	}
 
 	/**
+	 * Fill the component definition from OpenAPI annotations, if provided.
+	 * 
+	 * @param f
+	 * @param fieldSchema
+	 * @return
+	 */
+	protected Boolean fillComponentFromAnnotation(Field f, Schema<?> fieldSchema) {
+		JsonPropertyDescription description = f.getAnnotation(JsonPropertyDescription.class);
+		if (description != null) {
+			fieldSchema.setDescription(description.value());
+		}
+		io.swagger.v3.oas.annotations.media.Schema swaggerSchema = f.getAnnotation(io.swagger.v3.oas.annotations.media.Schema.class);
+		if (swaggerSchema != null) {
+			if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.description())) {
+				fieldSchema.setDescription(swaggerSchema.description());
+			}
+			if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.example())) {
+				fieldSchema.setExample(swaggerSchema.example());
+			}
+			return swaggerSchema.requiredMode() == io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED || swaggerSchema.required();
+		}
+		return null;
+	}
+
+	/**
 	 * Fill the component model from the model Java class, based on the reflection.
 	 * 
 	 * @param cls
@@ -290,22 +315,12 @@ public class OpenAPIv3Generator {
 				log.debug(" - Field: " + f);
 				Schema<?> fieldSchema = new Schema<String>();
 				fieldSchema.setName(name);
-				JsonPropertyDescription description = f.getAnnotation(JsonPropertyDescription.class);
-				if (description != null) {
-					fieldSchema.setDescription(description.value());
+
+				Boolean filledAndRequired = fillComponentFromAnnotation(f, fieldSchema);
+				if (filledAndRequired != null && filledAndRequired) {
+					schema.addRequiredItem(name);
 				}
-				io.swagger.v3.oas.annotations.media.Schema swaggerSchema = f.getAnnotation(io.swagger.v3.oas.annotations.media.Schema.class);
-				if (swaggerSchema != null) {
-					if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.description())) {
-						fieldSchema.setDescription(swaggerSchema.description());
-					}
-					if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.example())) {
-						fieldSchema.setExample(swaggerSchema.example());
-					}
-					if (swaggerSchema.requiredMode() == io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED || swaggerSchema.required()) {
-						schema.addRequiredItem(name);
-					}
-				}
+
 				JsonProperty property = f.getAnnotation(JsonProperty.class);
 				if (property != null) {
 					if (StringUtils.isNotBlank(property.defaultValue())) {
