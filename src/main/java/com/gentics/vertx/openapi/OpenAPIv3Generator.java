@@ -239,6 +239,31 @@ public class OpenAPIv3Generator {
 	}
 
 	/**
+	 * Fill the component definition from OpenAPI annotations, if provided.
+	 * 
+	 * @param f
+	 * @param fieldSchema
+	 * @return
+	 */
+	protected Boolean fillComponentFromAnnotation(Field f, Schema<?> fieldSchema) {
+		JsonPropertyDescription description = f.getAnnotation(JsonPropertyDescription.class);
+		if (description != null) {
+			fieldSchema.setDescription(description.value());
+		}
+		io.swagger.v3.oas.annotations.media.Schema swaggerSchema = f.getAnnotation(io.swagger.v3.oas.annotations.media.Schema.class);
+		if (swaggerSchema != null) {
+			if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.description())) {
+				fieldSchema.setDescription(swaggerSchema.description());
+			}
+			if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.example())) {
+				fieldSchema.setExample(swaggerSchema.example());
+			}
+			return swaggerSchema.requiredMode() == io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED || swaggerSchema.required();
+		}
+		return null;
+	}
+
+	/**
 	 * Fill the component model from the model Java class, based on the reflection.
 	 * 
 	 * @param cls
@@ -290,10 +315,7 @@ public class OpenAPIv3Generator {
 				log.debug(" - Field: " + f);
 				Schema<?> fieldSchema = new Schema<String>();
 				fieldSchema.setName(name);
-				JsonPropertyDescription description = f.getAnnotation(JsonPropertyDescription.class);
-				if (description != null) {
-					fieldSchema.setDescription(description.value());
-				}
+
 				JsonProperty property = f.getAnnotation(JsonProperty.class);
 				if (property != null) {
 					if (StringUtils.isNotBlank(property.defaultValue())) {
@@ -317,7 +339,11 @@ public class OpenAPIv3Generator {
 					if (generics.size() > 0) {
 						log.debug(" - Generics: " + Arrays.toString(generics.toArray()));
 					}
-					fillType(components, t, fieldSchema, generics);
+					fillType(t, fieldSchema, generics, openApi);
+				}
+				Boolean filledAndRequired = fillComponentFromAnnotation(f, fieldSchema);
+				if (filledAndRequired != null && filledAndRequired) {
+					schema.addRequiredItem(name);
 				}
 				fieldSchema.setTypes(Collections.singleton(fieldSchema.getType()));
 				return new UnmodifiableMapEntry<>(name, fieldSchema);
@@ -387,8 +413,34 @@ public class OpenAPIv3Generator {
 					schema.set$ref("#/components/schemas/" + ref.getSimpleName());
 					MediaType mediaType = new MediaType();
 					mediaType.setSchema(schema);
-					mediaType.setExample(e.getValue());
-					responseBody.addMediaType("*/*", mediaType);
+					if (e.getValue() != null && e.getValue().getBody() != null) {
+						org.raml.model.MimeType bodyMime = e.getValue().getBody().get("application/json");
+						if (bodyMime == null) {
+							bodyMime = e.getValue().getBody().get("text/plain");
+						}
+						if (bodyMime != null) {
+							String exampleText = bodyMime.getExample();
+							if (exampleText != null) {
+								exampleText = exampleText.trim();
+								try {
+									if (exampleText.startsWith("{")) {
+										mediaType.setExample(new io.vertx.core.json.JsonObject(exampleText).getMap());
+									} else if (exampleText.startsWith("[")) {
+										mediaType.setExample(new io.vertx.core.json.JsonArray(exampleText).getList());
+									} else {
+										mediaType.setExample(exampleText);
+									}
+								} catch (Exception ex) {
+									mediaType.setExample(exampleText);
+								}
+							}
+						} else {
+							mediaType.setExample(e.getValue());
+						}
+					} else {
+						mediaType.setExample(e.getValue());
+					}
+					responseBody.addMediaType("application/json", mediaType);
 					response.setContent(responseBody);
 					fillComponent(ref, openApi);
 				}							
@@ -609,7 +661,7 @@ public class OpenAPIv3Generator {
 	 * @param generics
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private void fillType(Components components, Class<?> modelClass, Schema fieldSchema, List<Type> generics) {
+	private void fillType(Class<?> modelClass, Schema fieldSchema, List<Type> generics, OpenAPI openApi) {
 		if (modelClass.isPrimitive() || Number.class.isAssignableFrom(modelClass) || Boolean.class.isAssignableFrom(modelClass)) {
 			if (int.class.isAssignableFrom(modelClass) || Integer.class.isAssignableFrom(modelClass)) {
 				fieldSchema.setType("integer");
@@ -637,13 +689,16 @@ public class OpenAPIv3Generator {
 			Schema<?> itemSchema = new Schema<String>();
 			if (modelClass.isArray()) {
 				List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-				fillType(components, modelClass.getComponentType(), itemSchema, generics1);
+				fillType(modelClass.getComponentType(), itemSchema, generics1, openApi);
 			} else {
 				generics.stream().forEach(gen -> {
 					if (Class.class.isInstance(gen)) {
 						Class<?> itemClass = Class.class.cast(gen);
 						List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-						fillType(components, itemClass, itemSchema, generics1);
+						fillType(itemClass, itemSchema, generics1, openApi);
+						if (!itemClass.isPrimitive() && !itemClass.getCanonicalName().startsWith("java.")) {
+							fillComponent(itemClass, openApi);
+						}
 					} else if (TypeVariable.class.isInstance(gen)) {
 						log.warn("Generic unimplemented type {} / {}", modelClass, gen);
 					} else {
@@ -657,7 +712,7 @@ public class OpenAPIv3Generator {
 				Schema enumSchema = new Schema<String>();
 				enumSchema.setType("string");
 				enumSchema.setEnum(Arrays.stream(modelClass.getEnumConstants()).map(e -> e.toString().toLowerCase()).collect(Collectors.toList()));
-				components.addSchemas(modelClass.getSimpleName(), enumSchema);
+				openApi.getComponents().addSchemas(modelClass.getSimpleName(), enumSchema);
 			}
 			if (Map.class.isAssignableFrom(modelClass)) {
 				if (generics.size() == 2) {
@@ -700,6 +755,8 @@ public class OpenAPIv3Generator {
 				}
 			} else if (JsonObject.class.isAssignableFrom(modelClass) || JsonSerializable.class.isAssignableFrom(modelClass)) {
 				fieldSchema.set$ref("#/components/schemas/AnyJson");
+			} else if (modelClass.equals(Object.class)) {
+				fieldSchema.setType("object");
 			} else {
 				fieldSchema.setType("object");
 				fieldSchema.set$ref("#/components/schemas/" + modelClass.getSimpleName());
