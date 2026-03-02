@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.Triple;
@@ -31,6 +32,7 @@ public final class InternalEndpointBuilder {
 
 	private final Router router;
 	private String path;
+	private String route;
 	private HttpMethod method;
 	private Integer order;
 	private String consumes;
@@ -76,6 +78,15 @@ public final class InternalEndpointBuilder {
 		return new InternalEndpointBuilder(router);
 	}
 
+	/**
+	 * Wrapper for {@link Route#route(String)}
+	 * @param route
+	 * @return
+	 */
+	public InternalEndpointBuilder withRoute(String route) {
+		this.route = route;
+		return this;
+	}
 
 	/**
 	 * Wrapper for {@link Route#path(String)}.
@@ -465,7 +476,7 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public InternalEndpointRoute build() {		
-		InternalEndpointRouteImpl endpoint = new InternalEndpointRouteImpl(router);
+		InternalEndpointRouteImpl endpoint = new InternalEndpointRouteImpl(router, false, Optional.ofNullable(route));
 		if (path != null) {
 			endpoint.path(path);
 		}
@@ -556,6 +567,6 @@ public final class InternalEndpointBuilder {
 		if (failureHandlers != null) {
 			failureHandlers.forEach(failureHandler -> endpoint.failureHandler(failureHandler));
 		}
-		return endpoint;
+		return endpoint.addMeToMetadata();
 	}
 }
