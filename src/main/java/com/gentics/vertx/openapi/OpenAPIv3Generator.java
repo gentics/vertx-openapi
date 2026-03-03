@@ -407,43 +407,53 @@ public class OpenAPIv3Generator {
 				}
 				response.setDescription(e.getValue().getDescription());
 				Content responseBody = new Content();
-				if (endpoint.getExampleResponseClasses() != null && endpoint.getExampleResponseClasses().get(e.getKey()) != null) {
-					Class<?> ref = endpoint.getExampleResponseClasses().get(e.getKey());
-					Schema<String> schema = new Schema<>();
-					schema.set$ref("#/components/schemas/" + ref.getSimpleName());
-					MediaType mediaType = new MediaType();
-					mediaType.setSchema(schema);
-					if (e.getValue() != null && e.getValue().getBody() != null) {
-						org.raml.model.MimeType bodyMime = e.getValue().getBody().get("application/json");
-						if (bodyMime == null) {
-							bodyMime = e.getValue().getBody().get("text/plain");
-						}
-						if (bodyMime != null) {
-							String exampleText = bodyMime.getExample();
-							if (exampleText != null) {
-								exampleText = exampleText.trim();
-								try {
-									if (exampleText.startsWith("{")) {
-										mediaType.setExample(new io.vertx.core.json.JsonObject(exampleText).getMap());
-									} else if (exampleText.startsWith("[")) {
-										mediaType.setExample(new io.vertx.core.json.JsonArray(exampleText).getList());
-									} else {
-										mediaType.setExample(exampleText);
-									}
-								} catch (Exception ex) {
-									mediaType.setExample(exampleText);
-								}
-							}
-						} else {
-							mediaType.setExample(e.getValue());
-						}
-					} else {
-						mediaType.setExample(e.getValue());
+
+				Class<?> ref = null;
+				if (endpoint.getExampleResponseClasses() != null) {
+					ref = endpoint.getExampleResponseClasses().get(e.getKey());
+				}
+				String mimeKey = null;
+				org.raml.model.MimeType bodyMime = null;
+				if (e.getValue() != null && e.getValue().getBody() != null) {
+					bodyMime = e.getValue().getBody().get("application/json");
+					mimeKey = "application/json";
+					if (bodyMime == null) {
+						bodyMime = e.getValue().getBody().get("text/plain");
+						mimeKey = "text/plain";
 					}
-					responseBody.addMediaType("application/json", mediaType);
-					response.setContent(responseBody);
+				}
+				MediaType mediaType = new MediaType();
+				if (ref != null) {
+					Schema<String> schema = new Schema<>();
+					schema.set$ref("#/components/schemas/" + getComponentName(ref));
+					mediaType.setSchema(schema);
 					fillComponent(ref, openApi);
-				}							
+				}
+				if (bodyMime != null) {
+					String exampleText = bodyMime.getExample();
+					if (exampleText != null) {
+						exampleText = exampleText.trim();
+						try {
+							if (exampleText.startsWith("{")) {
+								mediaType.setExample(new io.vertx.core.json.JsonObject(exampleText).getMap());
+							} else if (exampleText.startsWith("[")) {
+								mediaType.setExample(new io.vertx.core.json.JsonArray(exampleText).getList());
+							} else {
+								mediaType.setExample(exampleText);
+							}
+						} catch (Exception ex) {
+							mediaType.setExample(exampleText);
+						}
+					}
+				}
+				if (mimeKey == null) {
+					mimeKey = ref != null ? "application/json" : null;
+				}
+				if (mimeKey != null) {
+					responseBody.addMediaType(mimeKey, mediaType);
+					response.setContent(responseBody);
+				}
+
 				return new UnmodifiableMapEntry<Integer, ApiResponse>(e.getKey(), response);
 			}).filter(Objects::nonNull).forEach(e -> responses.addApiResponse(Integer.toString(e.getKey()), e.getValue()));
 		operation.setResponses(responses);
