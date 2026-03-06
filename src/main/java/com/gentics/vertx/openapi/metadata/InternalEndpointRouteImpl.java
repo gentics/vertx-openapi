@@ -168,8 +168,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	@Override
 	public InternalEndpointRoute method(HttpMethod method) {
 		if (this.method != null) {
-			throw new RuntimeException(
-					"The method for the endpoint was already set. The endpoint wrapper currently does not support more than one method per route.");
+			throw new RuntimeException("The method for the endpoint was already set. The endpoint wrapper currently does not support more than one method per route.");
 		}
 		this.method = method;
 		route.method(method);
@@ -225,24 +224,28 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public InternalEndpointRoute validate() {
+		if (hidden) {
+			log.debug("Skipping validation of descriptions of the hidden endpoint: " + getMethod() + " " + getRamlPath());
+			return this;
+		}
+
 		if (!produces.isEmpty() && produces.contains(UtilsAndConstants.APPLICATION_JSON) && exampleResponses.isEmpty()) {
-			throw new RuntimeException("Endpoint {" + getRamlPath() + "} has no example responses.");
+			throw new RuntimeException("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no example responses.");
 		}
 		if ((consumes.contains(UtilsAndConstants.APPLICATION_JSON) || consumes.contains(UtilsAndConstants.APPLICATION_JSON_UTF8))
 				&& exampleRequestMap == null) {
-			log.error("Endpoint {" + getPath() + "} has no example request.");
+			log.error("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no example request.");
 			throw new RuntimeException("Endpoint has no example request.");
 		}
 		if (isEmpty(description)) {
-			throw new RuntimeException("Endpoint {" + getPath() + "} has no description.");
+			throw new RuntimeException("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no description.");
 		}
 
 		// Check whether all segments have a description.
 		List<String> segments = getNamedSegments();
 		for (String segment : segments) {
 			if (!getUriParameters().containsKey(segment)) {
-				throw new RuntimeException(
-						"Missing URI description for path {" + getRamlPath() + "} segment {" + segment + "}");
+				throw new RuntimeException("Missing URI description for path {" + getMethod() + " " + getRamlPath() + "} segment {" + segment + "}");
 			}
 		}
 		return this;
