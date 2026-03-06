@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang.StringUtils;
 import org.raml.model.MimeType;
 import org.raml.model.Response;
 import org.raml.model.parameter.FormParameter;
@@ -253,6 +254,9 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public List<String> getNamedSegments() {
+		if (StringUtils.isBlank(getRamlPath())) {
+			return Collections.emptyList();
+		}
 		List<String> allMatches = new ArrayList<String>();
 		Matcher m = Pattern.compile("\\{[^}]*\\}").matcher(getRamlPath());
 		while (m.find()) {
@@ -310,7 +314,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public String getRamlPath() {
-		if (ramlPath == null) {
+		if (ramlPath == null && route.getPath() != null) {
 			return convertPath(route.getPath());
 		}
 		return ramlPath;
