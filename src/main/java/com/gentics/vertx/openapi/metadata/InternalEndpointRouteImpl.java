@@ -11,6 +11,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -85,8 +86,8 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	/**
 	 * Map of example responses for the corresponding status code.
 	 */
-	protected final Map<Integer, Response> exampleResponses = new HashMap<>();
-	protected final Map<Integer, Class<?>> exampleResponseClasses = new HashMap<>();
+	protected final Map<Integer, Response> exampleResponses = new LinkedHashMap<>();
+	protected final Map<Integer, Class<?>> exampleResponseClasses = new LinkedHashMap<>();
 	protected final Set<String> consumes = new LinkedHashSet<>();
 	protected final Set<String> produces = new LinkedHashSet<>();
 	protected final Map<String, QueryParameter> parameters = new HashMap<>();
@@ -379,8 +380,24 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 			mimeType.setSchema(getSchema(model.getClass()));
 			map.put("application/json", mimeType);
 		} else {
-			mimeType.setExample(model.toString());
-			if (model.getClass().getSimpleName().toLowerCase().startsWith("json")) {
+			String exampleText = null;
+			try {
+				if (model instanceof JsonObject) {
+					exampleText = ((JsonObject) model).encode();
+				} else if (model instanceof JsonArray) {
+					exampleText = ((JsonArray) model).encode();
+				} else {
+					exampleText = defaultMapper.writeValueAsString(model);
+				}
+			} catch (Exception e) {
+				exampleText = model.toString();
+			}
+
+			mimeType.setExample(exampleText);
+			mimeType.setSchema(getSchema(model.getClass()));
+			if (exampleText != null && (exampleText.startsWith("{") || exampleText.startsWith("["))) {
+				map.put("application/json", mimeType);
+			} else if (model.getClass().getSimpleName().toLowerCase().startsWith("json")) {
 				map.put("application/json", mimeType);
 			} else {
 				map.put("text/plain", mimeType);
@@ -428,7 +445,13 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 		String json = model.toJson(false);
 		mimeType.setExample(json);
 		mimeType.setSchema(getSchema(model.getClass()));
-		bodyMap.put("application/json", mimeType);
+
+		if (consumes != null && consumes.contains("multipart/form-data")) {
+			bodyMap.put("multipart/form-data", mimeType);
+		} else {
+			bodyMap.put("application/json", mimeType);
+		}
+
 		this.exampleRequestMap = bodyMap;
 		this.exampleRequestClass = model.getClass();
 		return this;
