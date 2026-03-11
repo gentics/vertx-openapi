@@ -150,8 +150,7 @@ public class JsonSchemaGenerationStrategy extends AbstractGenerationStrategy<Jso
 					schema.setProperties(schemaProperties);
 				}
 			} else {
-				schema.set$ref("#/components/schemas/JsonObject");
-				usedComponents.add("JsonObject");
+				schema.set$ref("#/components/schemas/AnyJson");
 			}
 			break;
 		case STRING:

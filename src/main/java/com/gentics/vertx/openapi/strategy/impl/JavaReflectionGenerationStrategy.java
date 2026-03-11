@@ -226,8 +226,8 @@ public class JavaReflectionGenerationStrategy extends AbstractGenerationStrategy
 					fieldSchema.setAdditionalProperties(new Schema<String>().type("object"));
 				}
 			} else if (JsonObject.class.isAssignableFrom(modelClass) || JsonSerializable.class.isAssignableFrom(modelClass)) {
-				fieldSchema.set$ref("#/components/schemas/JsonObject");
-				usedComponents.add("JsonObject");
+				fieldSchema.set$ref("#/components/schemas/AnyJson");
+				usedComponents.add("AnyJson");
 			} else if (modelClass.equals(Object.class)) {
 				fieldSchema.setType("object");
 			} else {

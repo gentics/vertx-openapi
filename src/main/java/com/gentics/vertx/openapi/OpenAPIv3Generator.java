@@ -302,18 +302,17 @@ public class OpenAPIv3Generator {
 	 */
 	protected void fillComponent(Class<?> cls, OpenAPI openApi, Set<String> usedComponents, Optional<InternalEndpointRoute> maybeInternalRoute) {
 		Components components = openApi.getComponents();
-		List<? extends ComponentGenerationStrategy<?>> componentGenerationStrategies = isForceReflectionStrategy() 
-				? List.of(
-					new JavaReflectionGenerationStrategy(this)
-				)
-				: List.of(
-					new JsonSchemaGenerationStrategy(this, maybeInternalRoute),
-					new JavaReflectionGenerationStrategy(this)
-				);
 		if (components.getSchemas() == null) {
-			components.setSchemas(new HashMap<>());
-			fillComponent(JsonObject.class, openApi, usedComponents, maybeInternalRoute);
+			components.setSchemas(new HashMap<>(Map.of("AnyJson", new Schema<String>())));
 		}
+		List<? extends ComponentGenerationStrategy<?>> componentGenerationStrategies = isForceReflectionStrategy() 
+			? List.of(
+				new JavaReflectionGenerationStrategy(this)
+			)					
+			: List.of(
+				new JsonSchemaGenerationStrategy(this, maybeInternalRoute),
+				new JavaReflectionGenerationStrategy(this)
+			);
 		log.debug("Generating {}", Objects.toString(cls));
 		componentGenerationStrategies.stream().map(strategy -> strategy.checkFillComponent(cls, openApi, usedComponents))
 			.filter(Optional::isPresent)
