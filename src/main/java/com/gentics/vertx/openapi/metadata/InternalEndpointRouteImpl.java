@@ -40,6 +40,7 @@ import com.fasterxml.jackson.core.util.MinimalPrettyPrinter;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
 import com.gentics.vertx.openapi.misc.UtilsAndConstants;
 import com.gentics.vertx.openapi.model.ParameterProvider;
@@ -66,7 +67,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	protected static final Logger log = LoggerFactory.getLogger(InternalEndpointRoute.class);
 
-	protected static final Map<Class<?>, String> SCHEMA_CACHE = new ConcurrentHashMap<>();
+	protected static final Map<Class<?>, JsonSchema> SCHEMA_CACHE = new ConcurrentHashMap<>();
 	protected static final Set<HttpMethod> mutatingMethods = ImmutableSet.of(POST, PUT, DELETE);
 
 	protected static ObjectMapper defaultMapper;
@@ -376,7 +377,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 		if (model instanceof RestModel) {
 			String json = ((RestModel) model).toJson(false);
 			mimeType.setExample(json);
-			mimeType.setSchema(getSchema(model.getClass()));
+			mimeType.setSchema(getJsonSchema(model.getClass()));
 			map.put("application/json", mimeType);
 		} else {
 			mimeType.setExample(model.toString());
@@ -392,8 +393,9 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 		return this;
 	}
 
-	private String getSchema(Class<? extends Object> clazz) {
-		return SCHEMA_CACHE.computeIfAbsent(clazz, this::getJsonSchema);
+	@Override
+	public JsonSchema getSchema(Class<? extends Object> clazz) {
+		return SCHEMA_CACHE.computeIfAbsent(clazz, this::getJsonSchemaObject);
 	}
 
 	@Override
@@ -427,7 +429,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 		MimeType mimeType = new MimeType();
 		String json = model.toJson(false);
 		mimeType.setExample(json);
-		mimeType.setSchema(getSchema(model.getClass()));
+		mimeType.setSchema(getJsonSchema(model.getClass()));
 		bodyMap.put("application/json", mimeType);
 		this.exampleRequestMap = bodyMap;
 		this.exampleRequestClass = model.getClass();
@@ -525,19 +527,43 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	}
 
 	/**
-	 * Generate the JSON schema for the given model class.
+	 * Generate the JSON schema object for the given model class.
 	 * 
 	 * @param clazz
 	 *            Model class
 	 * @return
 	 */
-	protected String getJsonSchema(Class<?> clazz) {
+	protected JsonSchema getJsonSchemaObject(Class<?> clazz) {
 		try {
-			com.fasterxml.jackson.module.jsonSchema.JsonSchema schema = schemaGen.generateSchema(clazz);
+			return schemaGen.generateSchema(clazz);
+		} catch (JsonProcessingException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/**
+	 * Make string out of the model class schema.
+	 * 
+	 * @param schema
+	 *            Model class schema
+	 * @return
+	 */
+	protected String getJsonSchema(JsonSchema schema) {
+		try {
 			return defaultMapper.writerWithDefaultPrettyPrinter().writeValueAsString(schema);
 		} catch (JsonProcessingException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	/**
+	 * Shortcut for making the string out of the schema class
+	 * 
+	 * @param clazz
+	 * @return
+	 */
+	protected String getJsonSchema(Class<?> clazz) {
+		return getJsonSchema(getSchema(clazz));
 	}
 
 	/**

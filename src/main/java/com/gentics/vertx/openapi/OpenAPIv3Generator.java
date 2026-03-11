@@ -2,25 +2,16 @@ package com.gentics.vertx.openapi;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.lang.reflect.TypeVariable;
-import java.math.BigDecimal;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.BiConsumer;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -38,15 +29,14 @@ import org.raml.model.parameter.AbstractParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
-import com.fasterxml.jackson.databind.JsonSerializable;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.gentics.vertx.openapi.metadata.InternalEndpointRoute;
 import com.gentics.vertx.openapi.model.ExtendedSecurityScheme;
 import com.gentics.vertx.openapi.model.Format;
 import com.gentics.vertx.openapi.model.InParameter;
 import com.gentics.vertx.openapi.model.OpenAPIGenerationException;
+import com.gentics.vertx.openapi.strategy.ComponentGenerationStrategy;
+import com.gentics.vertx.openapi.strategy.impl.JavaReflectionGenerationStrategy;
+import com.gentics.vertx.openapi.strategy.impl.JsonSchemaGenerationStrategy;
 import com.gentics.vertx.openapi.writer.OpenAPIVersionWriter;
 import com.gentics.vertx.openapi.writer.impl.V30Writer;
 import com.gentics.vertx.openapi.writer.impl.V31Writer;
@@ -90,6 +80,8 @@ public class OpenAPIv3Generator {
 	protected Map<String, ExtendedSecurityScheme> security;
 
 	protected boolean useFullPackageForComponentName = false;
+	protected boolean dontRemoveUnusedComponents = false;
+	protected boolean forceReflectionStrategy = false;
 
 	/**
 	 * Ctor
@@ -167,16 +159,27 @@ public class OpenAPIv3Generator {
 
 		openApi.setInfo(info);
 		openApi.setComponents(new Components());
+		Set<String> usedComponents = new HashSet<>();
+
 		try {
 			addSecurity(openApi);
 			maybeExtraComponentSupplier.ifPresent(componentSupplier -> {
-				componentSupplier.get().forEach(componentClass -> fillComponent(componentClass, openApi));
+				componentSupplier.get().forEach(componentClass -> fillComponent(componentClass, openApi, usedComponents, Optional.empty()));
 			});
 			for (Entry<Router, String> routerAndParent : routers.entrySet()) {
-				addRouter(routerAndParent.getValue(), routerAndParent.getKey(), openApi, maybePathItemTransformer);
+				addRouter(routerAndParent.getValue(), routerAndParent.getKey(), openApi, maybePathItemTransformer, usedComponents);
 			}
 		} catch (IOException e) {
 			throw new RuntimeException("Could not add all verticles to raml generator", e);
+		}
+
+		if (!dontRemoveUnusedComponents) {
+			Set<String> keys = new HashSet<>(openApi.getComponents().getSchemas().keySet());
+			keys.forEach(schema -> {
+				if (!usedComponents.contains(schema)) {
+					openApi.getComponents().getSchemas().remove(schema);
+				}
+			});
 		}
 
 		OpenAPIVersionWriter writer = useVersion31 ? new V31Writer() : new V30Writer();
@@ -194,9 +197,51 @@ public class OpenAPIv3Generator {
 	/**
 	 * Set to use full class names for the component model name.
 	 * @param useFullPackageForComponentName
+	 * @return 
 	 */
-	public void setUseFullPackageForComponentName(boolean useFullPackageForComponentName) {
+	public OpenAPIv3Generator setUseFullPackageForComponentName(boolean useFullPackageForComponentName) {
 		this.useFullPackageForComponentName = useFullPackageForComponentName;
+		return this;
+	}
+
+	/**
+	 * Check if unused model components stay in the specification
+	 * 
+	 * @return
+	 */
+	public boolean isDontRemoveUnusedComponents() {
+		return dontRemoveUnusedComponents;
+	}
+
+	/**
+	 * Set unused model components to stay in the specification
+	 * 
+	 * @param dontRemoveUnusedComponents
+	 * @return
+	 */
+	public OpenAPIv3Generator setDontRemoveUnusedComponents(boolean dontRemoveUnusedComponents) {
+		this.dontRemoveUnusedComponents = dontRemoveUnusedComponents;
+		return this;
+	}
+
+	/**
+	 * Is Java reflection strategy forced for all cases?
+	 * 
+	 * @return
+	 */
+	public boolean isForceReflectionStrategy() {
+		return forceReflectionStrategy;
+	}
+
+	/**
+	 * Set Java reflection generation strategy forced for all cases
+	 * 
+	 * @param forceReflectionStrategy
+	 * @return
+	 */
+	public OpenAPIv3Generator setForceReflectionStrategy(boolean forceReflectionStrategy) {
+		this.forceReflectionStrategy = forceReflectionStrategy;
+		return this;
 	}
 
 	/**
@@ -205,12 +250,22 @@ public class OpenAPIv3Generator {
 	 * @param cls
 	 * @return
 	 */
-	protected String getComponentName(Class<?> cls) {
-		if (isUseFullPackageForComponentName()) {
-			return cls.getCanonicalName().replace(".", "_");
-		} else {
-			return cls.getSimpleName();
+	protected String getComponentName(Class<?> cls, Optional<InternalEndpointRoute> maybeInternalRoute) {
+		List<? extends ComponentGenerationStrategy<?>> componentGenerationStrategies = isForceReflectionStrategy() 
+				? List.of(
+					new JavaReflectionGenerationStrategy(this)
+				)					
+				: List.of(
+					new JsonSchemaGenerationStrategy(this, maybeInternalRoute),
+					new JavaReflectionGenerationStrategy(this)
+				);
+		for (ComponentGenerationStrategy<?> strategy : componentGenerationStrategies) {
+			Optional<String> maybeName = strategy.makeComponentName(cls);
+			if (maybeName.isPresent()) {
+				return maybeName.get();
+			}
 		}
+		return cls.getSimpleName();
 	}
 
 	/**
@@ -239,116 +294,35 @@ public class OpenAPIv3Generator {
 	}
 
 	/**
-	 * Fill the component definition from OpenAPI annotations, if provided.
-	 * 
-	 * @param f
-	 * @param fieldSchema
-	 * @return
-	 */
-	protected Boolean fillComponentFromAnnotation(Field f, Schema<?> fieldSchema) {
-		JsonPropertyDescription description = f.getAnnotation(JsonPropertyDescription.class);
-		if (description != null) {
-			fieldSchema.setDescription(description.value());
-		}
-		io.swagger.v3.oas.annotations.media.Schema swaggerSchema = f.getAnnotation(io.swagger.v3.oas.annotations.media.Schema.class);
-		if (swaggerSchema != null) {
-			if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.description())) {
-				fieldSchema.setDescription(swaggerSchema.description());
-			}
-			if (org.apache.commons.lang3.StringUtils.isNotBlank(swaggerSchema.example())) {
-				fieldSchema.setExample(swaggerSchema.example());
-			}
-			return swaggerSchema.requiredMode() == io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED || swaggerSchema.required();
-		}
-		return null;
-	}
-
-	/**
 	 * Fill the component model from the model Java class, based on the reflection.
 	 * 
 	 * @param cls
 	 * @param openApi
+	 * @param usedComponents 
 	 */
-	@SuppressWarnings("rawtypes")
-	protected void fillComponent(Class<?> cls, OpenAPI openApi) {
-		String componentName = getComponentName(cls);
+	protected void fillComponent(Class<?> cls, OpenAPI openApi, Set<String> usedComponents, Optional<InternalEndpointRoute> maybeInternalRoute) {
 		Components components = openApi.getComponents();
 		if (components.getSchemas() == null) {
 			components.setSchemas(new HashMap<>(Map.of("AnyJson", new Schema<String>())));
 		}
-		if (StringUtils.isBlank(componentName) || components.getSchemas().containsKey(componentName)) {
-			return;
-		}
-		log.debug("Requesting component " + componentName);
-		Schema<?> schema = components.getSchemas().computeIfAbsent(componentName, name -> new Schema<String>());
-		schema.setType("object");
-		schema.setName(componentName);
-
-		List<Stream<Field>> fieldStreams = new ArrayList<>();
-		final List<Type> generics = new ArrayList<>();
-		generics.addAll(Arrays.asList(ParameterizedType.class.isInstance(cls) ? ParameterizedType.class.cast(cls).getActualTypeArguments() : new Type[0]));
-		Deque<Class<?>> dq = new ArrayDeque<>(2);
-		dq.addLast(cls);
-		while(!dq.isEmpty()) {
-			Class<?> tclass = dq.pop();
-			log.debug("Class: " + tclass.getCanonicalName());
-			fieldStreams.add(Arrays.stream(tclass.getDeclaredFields()));
-			generics.addAll(Arrays.asList(ParameterizedType.class.isInstance(tclass.getGenericSuperclass()) ? ParameterizedType.class.cast(tclass.getGenericSuperclass()).getActualTypeArguments() : new Type[0]));
-			dq.addAll(Arrays.stream(tclass.getInterfaces()).collect(Collectors.toList()));
-			tclass = tclass.getSuperclass();
-			if (tclass != null) {
-				dq.addLast(tclass);
-			}
-		}
-		if (generics.size() > 0) {
-			log.debug(" - Generics: " + Arrays.toString(generics.toArray()));
-		}
-		Map<String, Schema> properties = fieldStreams.stream().flatMap(Function.identity())
-			.filter(f -> !Modifier.isStatic(f.getModifiers())).peek(f -> {
-				Class<?> t = f.getType();
-				if (!t.isPrimitive() && !t.getCanonicalName().startsWith("java.lang") && !t.getCanonicalName().startsWith("java.lang")) {
-					fillComponent(t, openApi);
-				}
-			})
-			.map(f -> {
-				String name = f.getName();
-				log.debug(" - Field: " + f);
-				Schema<?> fieldSchema = new Schema<String>();
-				fieldSchema.setName(name);
-
-				JsonProperty property = f.getAnnotation(JsonProperty.class);
-				if (property != null) {
-					if (StringUtils.isNotBlank(property.defaultValue())) {
-						fieldSchema.setDefault(property.defaultValue());
-					}
-					if (StringUtils.isNotBlank(property.value())) {
-						name = property.value();
-					}
-					if (property.required()) {
-						schema.addRequiredItem(name);
-					}
-				}
-				Class<?> t = f.getType();
-				JsonDeserialize jdes = f.getAnnotation(JsonDeserialize.class);
-				if (jdes != null && jdes.as() != null) {
-					t = jdes.as();
-					fieldSchema.setType("object");
-					fieldSchema.set$ref("#/components/schemas/" + getComponentName(t));
-				} else {
-					generics.addAll(Arrays.asList(ParameterizedType.class.isInstance(f.getGenericType()) ? ParameterizedType.class.cast(f.getGenericType()).getActualTypeArguments() : new Type[0]));
-					if (generics.size() > 0) {
-						log.debug(" - Generics: " + Arrays.toString(generics.toArray()));
-					}
-					fillType(t, fieldSchema, generics, openApi);
-				}
-				Boolean filledAndRequired = fillComponentFromAnnotation(f, fieldSchema);
-				if (filledAndRequired != null && filledAndRequired) {
-					schema.addRequiredItem(name);
-				}
-				fieldSchema.setTypes(Collections.singleton(fieldSchema.getType()));
-				return new UnmodifiableMapEntry<>(name, fieldSchema);
-			}).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-		schema.setProperties(properties);
+		List<? extends ComponentGenerationStrategy<?>> componentGenerationStrategies = isForceReflectionStrategy() 
+			? List.of(
+				new JavaReflectionGenerationStrategy(this)
+			)					
+			: List.of(
+				new JsonSchemaGenerationStrategy(this, maybeInternalRoute),
+				new JavaReflectionGenerationStrategy(this)
+			);
+		log.debug("Generating {}", Objects.toString(cls));
+		componentGenerationStrategies.stream().map(strategy -> strategy.checkFillComponent(cls, openApi, usedComponents))
+			.filter(Optional::isPresent)
+			.findAny()
+			.map(Optional::get)
+			.ifPresentOrElse(schema -> {
+				log.debug("Generated component: {}", schema.getName());
+			}, () -> {
+				log.warn("Could not find strategy for the generation: {}", Objects.toString(cls));
+			});
 	}
 
 	/**
@@ -358,7 +332,7 @@ public class OpenAPIv3Generator {
 	 * @param pathItem
 	 * @param endpoint
 	 */
-	protected void resolveEndpointRoute(String path, PathItem pathItem, InternalEndpointRoute endpoint, OpenAPI openApi) {
+	protected void resolveEndpointRoute(String path, PathItem pathItem, InternalEndpointRoute endpoint, OpenAPI openApi, Set<String> usedComponents) {
 		Operation operation = new Operation();
 		if (endpoint.isHidden()) {
 			log.debug("Path {} is marked as hidden and skipped", path);
@@ -409,8 +383,10 @@ public class OpenAPIv3Generator {
 				Content responseBody = new Content();
 				if (endpoint.getExampleResponseClasses() != null && endpoint.getExampleResponseClasses().get(e.getKey()) != null) {
 					Class<?> ref = endpoint.getExampleResponseClasses().get(e.getKey());
+					String usedComponent = getComponentName(ref, Optional.of(endpoint));
 					Schema<String> schema = new Schema<>();
-					schema.set$ref("#/components/schemas/" + ref.getSimpleName());
+					schema.set$ref("#/components/schemas/" + usedComponent);
+					usedComponents.add(usedComponent);
 					MediaType mediaType = new MediaType();
 					mediaType.setSchema(schema);
 					if (e.getValue() != null && e.getValue().getBody() != null) {
@@ -442,7 +418,7 @@ public class OpenAPIv3Generator {
 					}
 					responseBody.addMediaType("application/json", mediaType);
 					response.setContent(responseBody);
-					fillComponent(ref, openApi);
+					fillComponent(ref, openApi, usedComponents, Optional.of(endpoint));
 				}							
 				return new UnmodifiableMapEntry<Integer, ApiResponse>(e.getKey(), response);
 			}).filter(Objects::nonNull).forEach(e -> responses.addApiResponse(Integer.toString(e.getKey()), e.getValue()));
@@ -451,7 +427,7 @@ public class OpenAPIv3Generator {
 			RequestBody requestBody = new RequestBody();
 			Content content = new Content();
 			endpoint.getExampleRequestMap().entrySet().stream().filter(e -> Objects.nonNull(e.getValue()))
-					.map(e -> fillMediaType(e.getKey(), e.getValue(), endpoint.getExampleRequestClass(), openApi))
+					.map(e -> fillMediaType(e.getKey(), e.getValue(), endpoint.getExampleRequestClass(), openApi, Optional.of(endpoint), usedComponents))
 					.filter(Objects::nonNull).forEach(e -> content.addMediaType(e.getKey(), e.getValue()));
 			requestBody.setContent(content);
 			operation.setRequestBody(requestBody);
@@ -507,9 +483,9 @@ public class OpenAPIv3Generator {
 	 * so it accepts a path and an item, and gives back the path, either the same one or modified one.
 	 * @throws IOException
 	 */
-	protected void addRouter(String parent, Router router, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer) throws IOException {
+	protected void addRouter(String parent, Router router, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer, Set<String> usedComponents) throws IOException {
 		for (Route route : router.getRoutes()) {
-			addRoute(parent, route, consumer, maybePathItemTransformer);
+			addRoute(parent, route, consumer, maybePathItemTransformer, usedComponents);
 		}
 	}
 
@@ -523,7 +499,7 @@ public class OpenAPIv3Generator {
 	 * so it accepts a path and an item, and gives back the path, either the same one or modified one.
 	 * @throws IOException
 	 */
-	protected void addRoute(String parent, Route route, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer) throws IOException {
+	protected void addRoute(String parent, Route route, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer, Set<String> usedComponents) throws IOException {
 		String rawPath = route.getPath();
 		if (StringUtils.isBlank(rawPath)) {
 			InternalEndpointRoute internalRoute = (InternalEndpointRoute) route.metadata().get(InternalEndpointRoute.class.getCanonicalName());
@@ -558,8 +534,8 @@ public class OpenAPIv3Generator {
 				log.debug("Path with metadata: " + path);
 				pathItem.setSummary(endpoint.getDisplayName());
 				pathItem.setDescription(endpoint.getDescription());
-				endpoint.getModel().forEach(modelComponent -> fillComponent(modelComponent, consumer));
-				resolveEndpointRoute(path, pathItem, endpoint, consumer);
+				endpoint.getModel().forEach(modelComponent -> fillComponent(modelComponent, consumer, usedComponents, Optional.of(endpoint)));
+				resolveEndpointRoute(path, pathItem, endpoint, consumer, usedComponents);
 			}, () -> {
 				resolveFallbackRoute(route, pathItem);
 			});
@@ -576,7 +552,7 @@ public class OpenAPIv3Generator {
 			paths.remove(path1, pathItem);
 		}
 		if (route.getSubRouter() != null) {
-			addRouter(path, route.getSubRouter(), consumer, maybePathItemTransformer);
+			addRouter(path, route.getSubRouter(), consumer, maybePathItemTransformer, usedComponents);
 		}
 	}
 
@@ -621,7 +597,7 @@ public class OpenAPIv3Generator {
 	 * @return
 	 */
 	@SuppressWarnings("rawtypes")
-	protected Map.Entry<String, MediaType> fillMediaType(String key, MimeType mimeType, Class<?> refClass, OpenAPI openApi) {
+	protected Map.Entry<String, MediaType> fillMediaType(String key, MimeType mimeType, Class<?> refClass, OpenAPI openApi, Optional<InternalEndpointRoute> maybeInternalRoute, Set<String> usedComponents) {
 		MediaType mediaType = new MediaType();
 		mediaType.setExample(mimeType.getExample());
 		if (mimeType.getFormParameters() != null) {
@@ -634,12 +610,14 @@ public class OpenAPIv3Generator {
 			return new UnmodifiableMapEntry<String, MediaType>("multipart/form-data", mediaType);
 		} else if (mimeType.getSchema() != null) {
 			JsonObject jschema = new JsonObject(mimeType.getSchema());
+			String usedComponent = getComponentName(refClass, maybeInternalRoute);
 			Schema<String> schema = new Schema<>();
 			schema.setType(jschema.getString("type", "string"));
 			schema.set$id(jschema.getString("id"));
-			schema.set$ref("#/components/schemas/" + refClass.getSimpleName());
+			schema.set$ref("#/components/schemas/" + usedComponent);
+			usedComponents.add(usedComponent);
 			mediaType.setSchema(schema);
-			fillComponent(refClass, openApi);
+			fillComponent(refClass, openApi, usedComponents, Optional.empty());
 			return new UnmodifiableMapEntry<String, MediaType>(key, mediaType);
 		} else if (refClass != null && refClass.getSimpleName().toLowerCase().startsWith("json")) {
 			mediaType.setExample(mimeType.getExample());
@@ -650,118 +628,6 @@ public class OpenAPIv3Generator {
 		} else { 
 			return new UnmodifiableMapEntry<String, MediaType>(key, mediaType);
 		}	
-	}
-
-	/**
-	 * Make a component model out of Java class.
-	 * 
-	 * @param components
-	 * @param modelClass
-	 * @param fieldSchema
-	 * @param generics
-	 */
-	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private void fillType(Class<?> modelClass, Schema fieldSchema, List<Type> generics, OpenAPI openApi) {
-		if (modelClass.isPrimitive() || Number.class.isAssignableFrom(modelClass) || Boolean.class.isAssignableFrom(modelClass)) {
-			if (int.class.isAssignableFrom(modelClass) || Integer.class.isAssignableFrom(modelClass)) {
-				fieldSchema.setType("integer");
-				fieldSchema.setFormat("int32");
-			} else if (boolean.class.isAssignableFrom(modelClass) || Boolean.class.isAssignableFrom(modelClass)) {
-				fieldSchema.setType("boolean");
-			} else if (float.class.isAssignableFrom(modelClass) || Float.class.isAssignableFrom(modelClass)) {
-				fieldSchema.setType("number");
-				fieldSchema.setFormat("float");
-			} else if (long.class.isAssignableFrom(modelClass) || Long.class.isAssignableFrom(modelClass)) {
-				fieldSchema.setType("integer");
-				fieldSchema.setFormat("int64");
-			} else if (double.class.isAssignableFrom(modelClass) || Double.class.isAssignableFrom(modelClass)) {
-				fieldSchema.setType("number");
-				fieldSchema.setFormat("double");
-			} else if (BigDecimal.class.isAssignableFrom(modelClass) || Number.class.isAssignableFrom(modelClass)) {
-				fieldSchema.setType("number");
-			} else {
-				fieldSchema.setType("object");
-			}
-		} else if (CharSequence.class.isAssignableFrom(modelClass)) {
-			fieldSchema.setType("string");
-		} else if (modelClass.isArray() || List.class.isAssignableFrom(modelClass)) {
-			fieldSchema.setType("array");
-			Schema<?> itemSchema = new Schema<String>();
-			if (modelClass.isArray()) {
-				List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-				fillType(modelClass.getComponentType(), itemSchema, generics1, openApi);
-			} else {
-				generics.stream().forEach(gen -> {
-					if (Class.class.isInstance(gen)) {
-						Class<?> itemClass = Class.class.cast(gen);
-						List<Type> generics1 = Arrays.asList(ParameterizedType.class.isInstance(modelClass) ? ParameterizedType.class.cast(modelClass).getActualTypeArguments() : new Type[0]);
-						fillType(itemClass, itemSchema, generics1, openApi);
-						if (!itemClass.isPrimitive() && !itemClass.getCanonicalName().startsWith("java.")) {
-							fillComponent(itemClass, openApi);
-						}
-					} else if (TypeVariable.class.isInstance(gen)) {
-						log.warn("Generic unimplemented type {} / {}", modelClass, gen);
-					} else {
-						log.error("Unknown generic array type: {} / {}",  modelClass, Arrays.toString(generics.toArray()));
-					}
-				});				
-			}
-			fieldSchema.setItems(itemSchema);
-		} else {
-			if (modelClass.isEnum()) {
-				Schema enumSchema = new Schema<String>();
-				enumSchema.setType("string");
-				enumSchema.setEnum(Arrays.stream(modelClass.getEnumConstants()).map(e -> e.toString().toLowerCase()).collect(Collectors.toList()));
-				openApi.getComponents().addSchemas(modelClass.getSimpleName(), enumSchema);
-			}
-			if (Map.class.isAssignableFrom(modelClass)) {
-				if (generics.size() == 2) {
-					BiConsumer<Type, Schema> innerTypeMapper = (ty, tfieldSchema) -> {
-						Class<?> tt = Class.class.isInstance(ty) ? Class.class.cast(ty) : generics.get(1).getClass();
-						if (tt.isPrimitive() || Number.class.isAssignableFrom(tt) || Boolean.class.isAssignableFrom(tt)) {
-							if (int.class.isAssignableFrom(tt) || Integer.class.isAssignableFrom(tt)) {
-								tfieldSchema.setType("integer");
-								tfieldSchema.setFormat("int32");
-							} else if (boolean.class.isAssignableFrom(tt) || Boolean.class.isAssignableFrom(tt)) {
-								tfieldSchema.setType("boolean");
-							} else if (float.class.isAssignableFrom(tt) || Float.class.isAssignableFrom(tt)) {
-								tfieldSchema.setType("number");
-								tfieldSchema.setFormat("float");
-							} else if (long.class.isAssignableFrom(tt) || Long.class.isAssignableFrom(tt)) {
-								tfieldSchema.setType("integer");
-								tfieldSchema.setFormat("int64");
-							} else if (double.class.isAssignableFrom(tt) || Double.class.isAssignableFrom(tt)) {
-								tfieldSchema.setType("number");
-								tfieldSchema.setFormat("double");
-							} else if (BigDecimal.class.isAssignableFrom(tt) || Number.class.isAssignableFrom(tt)) {
-								tfieldSchema.setType("number");
-							} else {
-								tfieldSchema.setType("object");
-							}
-						} else if (CharSequence.class.isAssignableFrom(tt)) {
-							tfieldSchema.setType("string");
-						} else {
-							tfieldSchema.setType("object");
-						}
-					};
-					fieldSchema.setType("object"); // TODO why object?
-					//innerTypeMapper.accept(generics.get(0).getClass(), fieldSchema);
-					Schema<?> valueSchema = new Schema<>();
-					innerTypeMapper.accept(generics.get(1), valueSchema);
-					fieldSchema.setAdditionalProperties(valueSchema);
-				} else {
-					fieldSchema.setType("object");
-					fieldSchema.setAdditionalProperties(new Schema<String>().type("object"));
-				}
-			} else if (JsonObject.class.isAssignableFrom(modelClass) || JsonSerializable.class.isAssignableFrom(modelClass)) {
-				fieldSchema.set$ref("#/components/schemas/AnyJson");
-			} else if (modelClass.equals(Object.class)) {
-				fieldSchema.setType("object");
-			} else {
-				fieldSchema.setType("object");
-				fieldSchema.set$ref("#/components/schemas/" + modelClass.getSimpleName());
-			}
-		}
 	}
 
 	/**
