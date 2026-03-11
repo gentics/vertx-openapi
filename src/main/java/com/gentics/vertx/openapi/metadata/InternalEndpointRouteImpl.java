@@ -662,7 +662,9 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public InternalEndpointRoute setInsecure(boolean insecure) {
-		this.securitySchemes = null;
+		if (insecure) {
+			this.securitySchemes = null;
+		}
 		return this;
 	}
 

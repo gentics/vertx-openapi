@@ -173,7 +173,7 @@ public class OpenAPIv3Generator {
 			throw new RuntimeException("Could not add all verticles to raml generator", e);
 		}
 
-		if (!dontRemoveUnusedComponents) {
+		if (!dontRemoveUnusedComponents && openApi.getComponents() != null && openApi.getComponents().getSchemas() != null) {
 			Set<String> keys = new HashSet<>(openApi.getComponents().getSchemas().keySet());
 			keys.forEach(schema -> {
 				if (!usedComponents.contains(schema)) {
@@ -376,17 +376,16 @@ public class OpenAPIv3Generator {
 		endpoint.getExampleResponses().entrySet().stream().filter(e -> Objects.nonNull(e.getValue()))
 			.map(e -> {
 				ApiResponse response = new ApiResponse();
-				if (e.getValue().getDescription().startsWith("Generated login token")) {
-					e.getValue().getHeaders();
-				}
 				response.setDescription(e.getValue().getDescription());
 				Content responseBody = new Content();
 				if (endpoint.getExampleResponseClasses() != null && endpoint.getExampleResponseClasses().get(e.getKey()) != null) {
-					Class<?> ref = endpoint.getExampleResponseClasses().get(e.getKey());
-					String usedComponent = getComponentName(ref, Optional.of(endpoint));
 					Schema<String> schema = new Schema<>();
-					schema.set$ref("#/components/schemas/" + usedComponent);
-					usedComponents.add(usedComponent);
+					Class<?> ref = endpoint.getExampleResponseClasses().get(e.getKey());
+					if (ref != null && !ref.getCanonicalName().startsWith("java.")) {
+						String usedComponent = getComponentName(ref, Optional.of(endpoint));
+						schema.set$ref("#/components/schemas/" + usedComponent);
+						usedComponents.add(usedComponent);
+					}
 					MediaType mediaType = new MediaType();
 					mediaType.setSchema(schema);
 					if (e.getValue() != null && e.getValue().getBody() != null) {

@@ -120,7 +120,7 @@ public class JavaReflectionGenerationStrategy extends AbstractGenerationStrategy
 				return new UnmodifiableMapEntry<>(name, fieldSchema);
 			}).filter(Objects::nonNull).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 		schema.setProperties(properties);
-		usedComponents.add(schema.getName());
+		//usedComponents.add(schema.getName());
 		return true;
 	}
 
@@ -267,6 +267,9 @@ public class JavaReflectionGenerationStrategy extends AbstractGenerationStrategy
 	@Override
 	public Optional<String> maybeMakeComponentName(Class<?> input) {
 		return Optional.ofNullable(input).map(cls -> {
+			if (JsonObject.class.isAssignableFrom(input)) {
+				return "AnyJson";
+			}
 			if (generator.isUseFullPackageForComponentName()) {
 				return cls.getCanonicalName().replace(".", "_");
 			} else {

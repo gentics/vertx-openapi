@@ -151,6 +151,7 @@ public class JsonSchemaGenerationStrategy extends AbstractGenerationStrategy<Jso
 				}
 			} else {
 				schema.set$ref("#/components/schemas/AnyJson");
+				usedComponents.add("AnyJson");
 			}
 			break;
 		case STRING:
@@ -178,6 +179,9 @@ public class JsonSchemaGenerationStrategy extends AbstractGenerationStrategy<Jso
 			if (id.contains(":")) {
 				if (id.startsWith("urn:jsonschema:")) {
 					id = id.substring("urn:jsonschema:".length());
+				}
+				if ("io:vertx:core:json:JsonObject".equals(id)) {
+					return "AnyJson";
 				}
 				if (generator.isUseFullPackageForComponentName()) {
 					return id.replace(":", "_");
