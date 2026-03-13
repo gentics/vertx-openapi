@@ -502,7 +502,7 @@ public class OpenAPIv3Generator {
 		String rawPath = route.getPath();
 		if (StringUtils.isBlank(rawPath)) {
 			InternalEndpointRoute internalRoute = (InternalEndpointRoute) route.metadata().get(InternalEndpointRoute.class.getCanonicalName());
-			if (route.isRegexPath() && internalRoute != null && StringUtils.isNotBlank(internalRoute.getRamlPath()) ) {
+			if (internalRoute != null && StringUtils.isNotBlank(internalRoute.getRamlPath()) ) {
 				rawPath = internalRoute.getRamlPath();
 			} else {
 				return;
@@ -616,7 +616,7 @@ public class OpenAPIv3Generator {
 			schema.set$ref("#/components/schemas/" + usedComponent);
 			usedComponents.add(usedComponent);
 			mediaType.setSchema(schema);
-			fillComponent(refClass, openApi, usedComponents, Optional.empty());
+			fillComponent(refClass, openApi, usedComponents, maybeInternalRoute);
 			return new UnmodifiableMapEntry<String, MediaType>(key, mediaType);
 		} else if (refClass != null && refClass.getSimpleName().toLowerCase().startsWith("json")) {
 			mediaType.setExample(mimeType.getExample());
