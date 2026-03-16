@@ -62,7 +62,7 @@ public class JsonSchemaGenerationStrategy extends AbstractGenerationStrategy<Jso
 		}
 		switch (jsonSchema.getType()) {
 		case ANY:
-			schema.setType("{}");
+			schema.setType("string");
 			break;
 		case ARRAY:
 			schema.setType("array");

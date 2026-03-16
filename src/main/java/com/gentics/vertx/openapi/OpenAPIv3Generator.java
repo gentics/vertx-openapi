@@ -161,13 +161,14 @@ public class OpenAPIv3Generator {
 		openApi.setComponents(new Components());
 		Set<String> usedComponents = new HashSet<>();
 
+		Context context = new Context(openApi, usedComponents, useVersion31);
 		try {
 			addSecurity(openApi);
 			maybeExtraComponentSupplier.ifPresent(componentSupplier -> {
-				componentSupplier.get().forEach(componentClass -> fillComponent(componentClass, openApi, usedComponents, Optional.empty()));
+				componentSupplier.get().forEach(componentClass -> fillComponent(context, componentClass, Optional.empty()));
 			});
 			for (Entry<Router, String> routerAndParent : routers.entrySet()) {
-				addRouter(routerAndParent.getValue(), routerAndParent.getKey(), openApi, maybePathItemTransformer, usedComponents);
+				addRouter(context, routerAndParent.getValue(), routerAndParent.getKey(), maybePathItemTransformer);
 			}
 		} catch (IOException e) {
 			throw new RuntimeException("Could not add all verticles to raml generator", e);
@@ -300,8 +301,8 @@ public class OpenAPIv3Generator {
 	 * @param openApi
 	 * @param usedComponents 
 	 */
-	protected void fillComponent(Class<?> cls, OpenAPI openApi, Set<String> usedComponents, Optional<InternalEndpointRoute> maybeInternalRoute) {
-		Components components = openApi.getComponents();
+	protected void fillComponent(Context context, Class<?> cls, Optional<InternalEndpointRoute> maybeInternalRoute) {
+		Components components = context.openApi.getComponents();
 		if (components.getSchemas() == null) {
 			components.setSchemas(new HashMap<>(Map.of("AnyJson", new Schema<String>())));
 		}
@@ -314,7 +315,7 @@ public class OpenAPIv3Generator {
 				new JavaReflectionGenerationStrategy(this)
 			);
 		log.debug("Generating {}", Objects.toString(cls));
-		componentGenerationStrategies.stream().map(strategy -> strategy.checkFillComponent(cls, openApi, usedComponents))
+		componentGenerationStrategies.stream().map(strategy -> strategy.checkFillComponent(cls, context.openApi, context.usedComponents))
 			.filter(Optional::isPresent)
 			.findAny()
 			.map(Optional::get)
@@ -332,7 +333,7 @@ public class OpenAPIv3Generator {
 	 * @param pathItem
 	 * @param endpoint
 	 */
-	protected void resolveEndpointRoute(String path, PathItem pathItem, InternalEndpointRoute endpoint, OpenAPI openApi, Set<String> usedComponents) {
+	protected void resolveEndpointRoute(Context context, String path, PathItem pathItem, InternalEndpointRoute endpoint) {
 		Operation operation = new Operation();
 		if (endpoint.isHidden()) {
 			log.debug("Path {} is marked as hidden and skipped", path);
@@ -351,8 +352,8 @@ public class OpenAPIv3Generator {
 		}
 		resolveMethod(method.name(), pathItem, operation);
 		List<Stream<Parameter>> params = List.of(
-				endpoint.getQueryParameters().entrySet().stream().map(e -> parameter(e.getKey(), e.getValue(), InParameter.QUERY)),
-				endpoint.getUriParameters().entrySet().stream().map(e -> parameter(e.getKey(), e.getValue(), InParameter.PATH)));
+				endpoint.getQueryParameters().entrySet().stream().map(e -> parameter(e.getKey(), e.getValue(), InParameter.QUERY, context.useVersion31)),
+				endpoint.getUriParameters().entrySet().stream().map(e -> parameter(e.getKey(), e.getValue(), InParameter.PATH, context.useVersion31)));
 		operation.setParameters(params.stream().flatMap(Function.identity()).filter(Objects::nonNull).collect(Collectors.toList()));
 		ApiResponses responses = new ApiResponses();
 		endpoint.getProduces().stream().map(e -> {
@@ -384,7 +385,7 @@ public class OpenAPIv3Generator {
 					if (ref != null && !ref.getCanonicalName().startsWith("java.")) {
 						String usedComponent = getComponentName(ref, Optional.of(endpoint));
 						schema.set$ref("#/components/schemas/" + usedComponent);
-						usedComponents.add(usedComponent);
+						context.usedComponents.add(usedComponent);
 					}
 					MediaType mediaType = new MediaType();
 					mediaType.setSchema(schema);
@@ -417,7 +418,7 @@ public class OpenAPIv3Generator {
 					}
 					responseBody.addMediaType("application/json", mediaType);
 					response.setContent(responseBody);
-					fillComponent(ref, openApi, usedComponents, Optional.of(endpoint));
+					fillComponent(context, ref, Optional.of(endpoint));
 				}							
 				return new UnmodifiableMapEntry<Integer, ApiResponse>(e.getKey(), response);
 			}).filter(Objects::nonNull).forEach(e -> responses.addApiResponse(Integer.toString(e.getKey()), e.getValue()));
@@ -426,7 +427,7 @@ public class OpenAPIv3Generator {
 			RequestBody requestBody = new RequestBody();
 			Content content = new Content();
 			endpoint.getExampleRequestMap().entrySet().stream().filter(e -> Objects.nonNull(e.getValue()))
-					.map(e -> fillMediaType(e.getKey(), e.getValue(), endpoint.getExampleRequestClass(), openApi, Optional.of(endpoint), usedComponents))
+					.map(e -> fillMediaType(context, e.getKey(), e.getValue(), endpoint.getExampleRequestClass(), Optional.of(endpoint)))
 					.filter(Objects::nonNull).forEach(e -> content.addMediaType(e.getKey(), e.getValue()));
 			requestBody.setContent(content);
 			operation.setRequestBody(requestBody);
@@ -482,9 +483,9 @@ public class OpenAPIv3Generator {
 	 * so it accepts a path and an item, and gives back the path, either the same one or modified one.
 	 * @throws IOException
 	 */
-	protected void addRouter(String parent, Router router, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer, Set<String> usedComponents) throws IOException {
+	protected void addRouter(Context context, String parent, Router router, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer) throws IOException {
 		for (Route route : router.getRoutes()) {
-			addRoute(parent, route, consumer, maybePathItemTransformer, usedComponents);
+			addRoute(context, parent, route, maybePathItemTransformer);
 		}
 	}
 
@@ -498,15 +499,13 @@ public class OpenAPIv3Generator {
 	 * so it accepts a path and an item, and gives back the path, either the same one or modified one.
 	 * @throws IOException
 	 */
-	protected void addRoute(String parent, Route route, OpenAPI consumer, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer, Set<String> usedComponents) throws IOException {
+	protected void addRoute(Context context, String parent, Route route, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer) throws IOException {
 		String rawPath = route.getPath();
-		if (StringUtils.isBlank(rawPath)) {
-			InternalEndpointRoute internalRoute = (InternalEndpointRoute) route.metadata().get(InternalEndpointRoute.class.getCanonicalName());
-			if (internalRoute != null && StringUtils.isNotBlank(internalRoute.getRamlPath()) ) {
-				rawPath = internalRoute.getRamlPath();
-			} else {
-				return;
-			}
+		InternalEndpointRoute internalRoute = (InternalEndpointRoute) route.metadata().get(InternalEndpointRoute.class.getCanonicalName());
+		if (internalRoute != null && StringUtils.isNotBlank(internalRoute.getRamlPath()) ) {
+			rawPath = internalRoute.getRamlPath();
+		} else if (StringUtils.isBlank(rawPath)) {
+			return;
 		}
 		String path = (parent + (Strings.CI.equals(rawPath, "/") ? "/" : Arrays.stream(rawPath.split("/"))
 					.map(segment -> segment.startsWith(":") ? ("{" + segment.substring(1) + "}") : segment)
@@ -518,7 +517,7 @@ public class OpenAPIv3Generator {
 			log.debug("Path filtered off: " + path);
 			return;
 		}
-		Paths paths = consumer.getPaths();
+		Paths paths = context.openApi.getPaths();
 
 		PathItem pathItem = Optional.ofNullable(paths.get(path)).orElseGet(() -> {
 			log.debug("Raw path: " + path);
@@ -533,8 +532,8 @@ public class OpenAPIv3Generator {
 				log.debug("Path with metadata: " + path);
 				pathItem.setSummary(endpoint.getDisplayName());
 				pathItem.setDescription(endpoint.getDescription());
-				endpoint.getModel().forEach(modelComponent -> fillComponent(modelComponent, consumer, usedComponents, Optional.of(endpoint)));
-				resolveEndpointRoute(path, pathItem, endpoint, consumer, usedComponents);
+				endpoint.getModel().forEach(modelComponent -> fillComponent(context, modelComponent, Optional.of(endpoint)));
+				resolveEndpointRoute(context, path, pathItem, endpoint);
 			}, () -> {
 				resolveFallbackRoute(route, pathItem);
 			});
@@ -551,7 +550,7 @@ public class OpenAPIv3Generator {
 			paths.remove(path1, pathItem);
 		}
 		if (route.getSubRouter() != null) {
-			addRouter(path, route.getSubRouter(), consumer, maybePathItemTransformer, usedComponents);
+			addRouter(context, path, route.getSubRouter(), maybePathItemTransformer);
 		}
 	}
 
@@ -596,11 +595,11 @@ public class OpenAPIv3Generator {
 	 * @return
 	 */
 	@SuppressWarnings("rawtypes")
-	protected Map.Entry<String, MediaType> fillMediaType(String key, MimeType mimeType, Class<?> refClass, OpenAPI openApi, Optional<InternalEndpointRoute> maybeInternalRoute, Set<String> usedComponents) {
+	protected Map.Entry<String, MediaType> fillMediaType(Context context, String key, MimeType mimeType, Class<?> refClass, Optional<InternalEndpointRoute> maybeInternalRoute) {
 		MediaType mediaType = new MediaType();
 		mediaType.setExample(mimeType.getExample());
 		if (mimeType.getFormParameters() != null) {
-			Map<String, Schema> props = mimeType.getFormParameters().entrySet().stream().map(p -> parameter(p.getKey(), p.getValue().get(0), null))
+			Map<String, Schema> props = mimeType.getFormParameters().entrySet().stream().map(p -> parameter(p.getKey(), p.getValue().get(0), null, context.useVersion31))
 					.collect(Collectors.toMap(p -> p.getName(), p -> p.getSchema()));
 			Schema<String> schema = new Schema<>();
 			schema.setType("object");
@@ -614,9 +613,9 @@ public class OpenAPIv3Generator {
 			schema.setType(jschema.getString("type", "string"));
 			schema.set$id(jschema.getString("id"));
 			schema.set$ref("#/components/schemas/" + usedComponent);
-			usedComponents.add(usedComponent);
+			context.usedComponents.add(usedComponent);
 			mediaType.setSchema(schema);
-			fillComponent(refClass, openApi, usedComponents, maybeInternalRoute);
+			fillComponent(context, refClass, maybeInternalRoute);
 			return new UnmodifiableMapEntry<String, MediaType>(key, mediaType);
 		} else if (refClass != null && refClass.getSimpleName().toLowerCase().startsWith("json")) {
 			mediaType.setExample(mimeType.getExample());
@@ -638,7 +637,7 @@ public class OpenAPIv3Generator {
 	 * @return
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	protected final Parameter parameter(String name, AbstractParam param, InParameter inType) {
+	protected final Parameter parameter(String name, AbstractParam param, InParameter inType, boolean useVersion31) {
 		Schema schema;
 		switch (param.getType()) {
 		case BOOLEAN:
@@ -683,7 +682,11 @@ public class OpenAPIv3Generator {
 		schema.setPattern(param.getPattern());
 		schema.setDescription(param.getDescription());
 		if (StringUtils.isNotBlank(param.getExample())) {
-			schema.setExample(param.getExample());
+			if (useVersion31) {
+				schema.setExamples(List.of(param.getExample()));
+			} else {
+				schema.setExample(param.getExample());
+			}
 		}
 		Parameter p = new Parameter();
 		p.setRequired(param.isRequired());
@@ -694,5 +697,21 @@ public class OpenAPIv3Generator {
 			p.setIn(inType.toString());
 		}
 		return p;
+	}
+
+	/**
+	 * Generator session context
+	 */
+	protected class Context {
+		public final OpenAPI openApi;
+		public final Set<String> usedComponents;
+		public final boolean useVersion31;
+
+		public Context(OpenAPI consumer, Set<String> usedComponents, boolean useVersion31) {
+			super();
+			this.openApi = consumer;
+			this.usedComponents = usedComponents;
+			this.useVersion31 = useVersion31;
+		}
 	}
 }
