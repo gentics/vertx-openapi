@@ -2,7 +2,7 @@ package com.gentics.vertx.openapi.route;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,6 +14,7 @@ import org.raml.model.parameter.QueryParameter;
 
 import com.gentics.vertx.openapi.metadata.InternalEndpointRoute;
 import com.gentics.vertx.openapi.metadata.InternalEndpointRouteImpl;
+import com.gentics.vertx.openapi.model.ExtendedSecurityScheme;
 import com.gentics.vertx.openapi.model.ParameterProvider;
 import com.gentics.vertx.openapi.model.RestModel;
 
@@ -38,9 +39,9 @@ public final class InternalEndpointBuilder {
 	private String consumes;
 	private Router subRouter;
 	private Boolean useNormalisedPath;
-	private Pair<HttpResponseStatus, String> exampleResponse;
-	private Triple<HttpResponseStatus, Object, String> exampleResponseModel;
-	private Object[] exampleResponseHeader;
+	private List<Pair<HttpResponseStatus, String>> exampleResponses;
+	private List<Triple<HttpResponseStatus, Object, String>> exampleResponseModels;
+	private List<Object[]> exampleResponseHeaders;
 	private String produces;
 	private String pathRegex;
 	private String displayName;
@@ -61,7 +62,7 @@ public final class InternalEndpointBuilder {
 	private Boolean hidden;
 	private Collection<Class<?>> modelComponents;
 	private Boolean insecure;
-	private Collection<String> secureWith;
+	private Map<String, ExtendedSecurityScheme> secureWith;
 	private ArrayList<Pair<String, QueryParameter>> queryParameterModels;
 
 	private InternalEndpointBuilder(Router router) {
@@ -177,7 +178,10 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withExampleResponse(HttpResponseStatus status, String description) {
-		this.exampleResponse = Pair.of(status, description);
+		if (this.exampleResponses == null) {
+			this.exampleResponses = new ArrayList<>(1);
+		}
+		this.exampleResponses.add(Pair.of(status, description));
 		return this;
 	}
 
@@ -193,7 +197,10 @@ public final class InternalEndpointBuilder {
 	 * @return Fluent API
 	 */
 	public InternalEndpointBuilder withExampleResponse(HttpResponseStatus status, Object model, String description) {
-		this.exampleResponseModel = Triple.of(status, model, description);
+		if (this.exampleResponseModels == null) {
+			this.exampleResponseModels = new ArrayList<>(1);
+		}
+		this.exampleResponseModels.add(Triple.of(status, model, description));
 		return this;
 	}
 
@@ -213,7 +220,10 @@ public final class InternalEndpointBuilder {
 	 * @return
 	 */
 	public InternalEndpointBuilder withExampleResponse(HttpResponseStatus status, String description, String headerName, String example, String headerDescription) {
-		this.exampleResponseHeader = new Object[] {status, description, headerName, example, headerDescription };
+		if (this.exampleResponseHeaders == null) {
+			this.exampleResponseHeaders = new ArrayList<>(1);
+		}
+		this.exampleResponseHeaders.add(new Object[] { status, description, headerName, example, headerDescription });
 		return this;
 	}
 
@@ -463,13 +473,30 @@ public final class InternalEndpointBuilder {
 		return this;
 	}
 
+	/**
+	 * Secure the endpoint with a known scheme by its key
+	 * 
+	 * @param securityScheme
+	 * @return
+	 */
 	public InternalEndpointBuilder secureWith(String securityScheme) {
+		return secureWith(securityScheme, null);
+	}
+
+	/**
+	 * Secure the endpoint with a possibly unknown scheme 
+	 * 
+	 * @param securitySchemeKey
+	 * @return
+	 */
+	public InternalEndpointBuilder secureWith(String securitySchemeKey, ExtendedSecurityScheme scheme) {
 		if (this.secureWith == null) {
-			this.secureWith = new HashSet<>(1);
+			this.secureWith = new HashMap<>(1);
 		}
-		this.secureWith.add(securityScheme);
+		this.secureWith.put(securitySchemeKey, scheme);
 		return this;
 	}
+
 	/**
 	 * Build the wrapped
 	 * 
@@ -477,6 +504,8 @@ public final class InternalEndpointBuilder {
 	 */
 	public InternalEndpointRoute build() {		
 		InternalEndpointRouteImpl endpoint = new InternalEndpointRouteImpl(router, false, Optional.ofNullable(route));
+		endpoint.setExtendedSecuritySchemes(secureWith);
+
 		if (path != null) {
 			endpoint.path(path);
 		}
@@ -495,14 +524,14 @@ public final class InternalEndpointBuilder {
 		if (useNormalisedPath != null) {
 			endpoint.useNormalisedPath(useNormalisedPath);
 		}
-		if (exampleResponse != null) {
-			endpoint.exampleResponse(exampleResponse.getKey(), exampleResponse.getValue());
+		if (exampleResponses != null) {
+			exampleResponses.forEach(er -> endpoint.exampleResponse(er.getKey(), er.getValue()));
 		}
-		if (exampleResponseModel != null) {
-			endpoint.exampleResponse(exampleResponseModel.getLeft(), exampleResponseModel.getMiddle(), exampleResponseModel.getRight());
+		if (exampleResponseModels != null) {
+			exampleResponseModels.forEach(erm -> endpoint.exampleResponse(erm.getLeft(), erm.getMiddle(), erm.getRight()));
 		}
-		if (exampleResponseHeader != null) {
-			endpoint.exampleResponse((HttpResponseStatus) exampleResponseHeader[0], (String) exampleResponseHeader[1], (String) exampleResponseHeader[2], (String) exampleResponseHeader[3], (String) exampleResponseHeader[4]);
+		if (exampleResponseHeaders != null) {
+			exampleResponseHeaders.forEach(erh -> endpoint.exampleResponse((HttpResponseStatus) erh[0], (String) erh[1], (String) erh[2], (String) erh[3], (String) erh[4]));
 		}
 		if (produces != null) {
 			endpoint.produces(produces);

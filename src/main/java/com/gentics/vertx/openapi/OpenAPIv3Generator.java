@@ -90,8 +90,8 @@ public class OpenAPIv3Generator {
 	 * @param maybePathBlacklist optional regex for API path blacklist
 	 * @param maybePathWhitelist optional regex for API path whitelist
 	 */
-	public OpenAPIv3Generator(String version, List<String> servers, 
-			@Nonnull Optional<? extends Collection<Pattern>> maybePathBlacklist, 
+	public OpenAPIv3Generator(String version, List<String> servers,
+			@Nonnull Optional<? extends Collection<Pattern>> maybePathBlacklist,
 			@Nonnull Optional<? extends Collection<Pattern>> maybePathWhitelist) {
 		this(version, servers, null, maybePathBlacklist, maybePathWhitelist);
 	}
@@ -103,9 +103,9 @@ public class OpenAPIv3Generator {
 	 * @param maybePathBlacklist optional regex for API path blacklist
 	 * @param maybePathWhitelist optional regex for API path whitelist
 	 */
-	public OpenAPIv3Generator(String version, List<String> servers, 
+	public OpenAPIv3Generator(String version, List<String> servers,
 			@Nonnull Map<String, ExtendedSecurityScheme> security,
-			@Nonnull Optional<? extends Collection<Pattern>> maybePathBlacklist, 
+			@Nonnull Optional<? extends Collection<Pattern>> maybePathBlacklist,
 			@Nonnull Optional<? extends Collection<Pattern>> maybePathWhitelist) {
 		this.maybePathBlacklist = maybePathBlacklist;
 		this.maybePathWhitelist = maybePathWhitelist;
@@ -122,9 +122,9 @@ public class OpenAPIv3Generator {
 	 * @param pretty prettify the output
 	 * @param maybePathItemTransformer an optional custom path and path item transformer
 	 * @return
-	 * @throws OpenAPIGenerationException 
+	 * @throws OpenAPIGenerationException
 	 */
-	public String generate(Map<Router, String> routers, Format format, boolean pretty, 
+	public String generate(Map<Router, String> routers, Format format, boolean pretty,
 			@Nonnull Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer,
 			@Nonnull Optional<Supplier<Collection<Class<?>>>> maybeExtraComponentSupplier) throws OpenAPIGenerationException {
 		return generate("Created with Gentics Vert.x OpenAPI generator", routers, format, pretty, false, maybePathItemTransformer, maybeExtraComponentSupplier);
@@ -139,7 +139,7 @@ public class OpenAPIv3Generator {
 	 * @param useVersion31 switch between OpenAPI spec versions v3.1 and v3.0
 	 * @param maybePathItemTransformer an optional custon path and path item transformer
 	 * @return the generated spec text
-	 * @throws OpenAPIGenerationException 
+	 * @throws OpenAPIGenerationException
 	 */
 	public String generate(String name, Map<Router, String> routers, Format format, boolean pretty, boolean useVersion31, 
 			@Nonnull Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer,
@@ -275,22 +275,33 @@ public class OpenAPIv3Generator {
 	 * @param openApi
 	 */
 	protected void addSecurity(OpenAPI openApi) {
+		Components components;
+		if (openApi.getComponents() == null) {
+			components = new Components();
+			openApi.setComponents(components);
+		} else {
+			components = openApi.getComponents();
+		}
 		if (security != null) {
-			Components components;
-			if (openApi.getComponents() == null) {
-				components = new Components();
-				openApi.setComponents(components);
-			} else {
-				components = openApi.getComponents();
-			}
 			security.entrySet().forEach(e -> {
-				components.addSecuritySchemes(e.getKey(), e.getValue().getScheme());
-				if (e.getValue().isGlobal()) {
-					SecurityRequirement req = new SecurityRequirement();
-					req.addList(e.getKey());
-					openApi.addSecurityItem(req);
-				}
+				addSecurity(openApi, e.getKey(), e.getValue());
 			});
+		}
+	}
+
+	/**
+	 * Add a security scheme for the key
+	 * 
+	 * @param openApi
+	 * @param key
+	 * @param scheme
+	 */
+	protected void addSecurity(OpenAPI openApi, String key, ExtendedSecurityScheme scheme) {
+		openApi.getComponents().addSecuritySchemes(key, scheme.getScheme());
+		if (scheme.isGlobal()) {
+			SecurityRequirement req = new SecurityRequirement();
+			req.addList(key);
+			openApi.addSecurityItem(req);
 		}
 	}
 
@@ -339,14 +350,25 @@ public class OpenAPIv3Generator {
 			log.debug("Path {} is marked as hidden and skipped", path);
 			return;
 		}
+
+		if (StringUtils.isNotBlank(endpoint.getDisplayName())) {
+			operation.setSummary(endpoint.getDisplayName());
+		}
+		if (StringUtils.isNotBlank(endpoint.getDescription())) {
+			operation.setDescription(endpoint.getDescription());
+		}
+
 		HttpMethod method = endpoint.getMethod();
 		if (method == null) {
 			method = HttpMethod.GET;
 		}
-		if (endpoint.getSecuritySchemes() != null) {
-			operation.setSecurity(endpoint.getSecuritySchemes().stream().map(scheme -> {
+		if (endpoint.getExtendedSecuritySchemes() != null) {
+			operation.setSecurity(endpoint.getExtendedSecuritySchemes().entrySet().stream().map(scheme -> {
 				SecurityRequirement req = new SecurityRequirement();
-				req.addList(scheme);
+				req.addList(scheme.getKey());
+				if (scheme.getValue() != null) {
+					addSecurity(context.openApi, scheme.getKey(), scheme.getValue());
+				}
 				return req;
 			}).collect(Collectors.toList()));
 		}
@@ -389,32 +411,39 @@ public class OpenAPIv3Generator {
 					}
 					MediaType mediaType = new MediaType();
 					mediaType.setSchema(schema);
+					String mimeKey = null;
+					org.raml.model.MimeType bodyMime = null;
 					if (e.getValue() != null && e.getValue().getBody() != null) {
-						org.raml.model.MimeType bodyMime = e.getValue().getBody().get("application/json");
+						bodyMime = e.getValue().getBody().get("application/json");
+						mimeKey = "application/json";
 						if (bodyMime == null) {
 							bodyMime = e.getValue().getBody().get("text/plain");
+							mimeKey = "text/plain";
 						}
-						if (bodyMime != null) {
-							String exampleText = bodyMime.getExample();
-							if (exampleText != null) {
-								exampleText = exampleText.trim();
-								try {
-									if (exampleText.startsWith("{")) {
-										mediaType.setExample(new io.vertx.core.json.JsonObject(exampleText).getMap());
-									} else if (exampleText.startsWith("[")) {
-										mediaType.setExample(new io.vertx.core.json.JsonArray(exampleText).getList());
-									} else {
-										mediaType.setExample(exampleText);
-									}
-								} catch (Exception ex) {
+					}
+					if (bodyMime != null) {
+						String exampleText = bodyMime.getExample();
+						if (exampleText != null) {
+							exampleText = exampleText.trim();
+							try {
+								if (exampleText.startsWith("{")) {
+									mediaType.setExample(new io.vertx.core.json.JsonObject(exampleText).getMap());
+								} else if (exampleText.startsWith("[")) {
+									mediaType.setExample(new io.vertx.core.json.JsonArray(exampleText).getList());
+								} else {
 									mediaType.setExample(exampleText);
 								}
+							} catch (Exception ex) {
+								mediaType.setExample(exampleText);
 							}
-						} else {
-							mediaType.setExample(e.getValue());
 						}
-					} else {
-						mediaType.setExample(e.getValue());
+					}
+					if (mimeKey == null) {
+						mimeKey = ref != null ? "application/json" : null;
+					}
+					if (mimeKey != null) {
+						responseBody.addMediaType(mimeKey, mediaType);
+						response.setContent(responseBody);
 					}
 					responseBody.addMediaType("application/json", mediaType);
 					response.setContent(responseBody);
@@ -444,32 +473,32 @@ public class OpenAPIv3Generator {
 	 */
 	protected void resolveMethod(String methodName, PathItem pathItem, Operation operation) {
 		switch (methodName.toUpperCase()) {
-		case "DELETE":
-			pathItem.setDelete(operation);
-			break;
-		case "GET":
-			pathItem.setGet(operation);
-			break;
-		case "HEAD":
-			pathItem.setHead(operation);
-			break;
-		case "OPTIONS":
-			pathItem.setOptions(operation);
-			break;
-		case "PATCH":
-			pathItem.setPatch(operation);
-			break;
-		case "POST":
-			pathItem.setPost(operation);
-			break;
-		case "PUT":
-			pathItem.setPut(operation);
-			break;
-		case "TRACE":
-			pathItem.setTrace(operation);
-			break;
-		default:
-			break;
+			case "DELETE":
+				pathItem.setDelete(operation);
+				break;
+			case "GET":
+				pathItem.setGet(operation);
+				break;
+			case "HEAD":
+				pathItem.setHead(operation);
+				break;
+			case "OPTIONS":
+				pathItem.setOptions(operation);
+				break;
+			case "PATCH":
+				pathItem.setPatch(operation);
+				break;
+			case "POST":
+				pathItem.setPost(operation);
+				break;
+			case "PUT":
+				pathItem.setPut(operation);
+				break;
+			case "TRACE":
+				pathItem.setTrace(operation);
+				break;
+			default:
+				break;
 		}
 	}
 
@@ -508,8 +537,8 @@ public class OpenAPIv3Generator {
 			return;
 		}
 		String path = (parent + (Strings.CI.equals(rawPath, "/") ? "/" : Arrays.stream(rawPath.split("/"))
-					.map(segment -> segment.startsWith(":") ? ("{" + segment.substring(1) + "}") : segment)
-					.collect(Collectors.joining("/"))))
+						.map(segment -> segment.startsWith(":") ? ("{" + segment.substring(1) + "}") : segment)
+						.collect(Collectors.joining("/"))))
 				.replace("//", "/");
 
 		if(maybePathBlacklist.flatMap(list -> list.stream().filter(blacklisted -> blacklisted.matcher(path).matches()).findAny()).isPresent()
@@ -591,7 +620,7 @@ public class OpenAPIv3Generator {
 	 * @param key
 	 * @param mimeType
 	 * @param refClass
-	 * @param openApi 
+	 * @param openApi
 	 * @return
 	 */
 	@SuppressWarnings("rawtypes")
@@ -623,9 +652,9 @@ public class OpenAPIv3Generator {
 			schema.setType("object");
 			mediaType.setSchema(schema);
 			return new UnmodifiableMapEntry<String, MediaType>(key, mediaType);
-		} else { 
+		} else {
 			return new UnmodifiableMapEntry<String, MediaType>(key, mediaType);
-		}	
+		}
 	}
 
 	/**
@@ -640,38 +669,38 @@ public class OpenAPIv3Generator {
 	protected final Parameter parameter(String name, AbstractParam param, InParameter inType, boolean useVersion31) {
 		Schema schema;
 		switch (param.getType()) {
-		case BOOLEAN:
-			schema = new Schema<Boolean>();
-			schema.setType("boolean");
-			break;
-		case DATE:
-			schema = new Schema<Long>();
-			schema.setType("integer");
-			schema.setFormat("int64");
-			break;
-		case FILE:
-			schema = new Schema<File>();
-			schema.setType("string");
-			schema.setFormat("binary");
-			break;
-		case INTEGER:
-			schema = new Schema<Integer>();
-			schema.setType("integer");
-			schema.setFormat("int32");
-			break;
-		case NUMBER:
-			schema = new Schema<Double>();
-			schema.setType("number");
-			schema.setFormat("double");
-			break;
-		case STRING:
-			schema = new Schema<String>();
-			schema.setType("string");
-			break;
-		default:
-			schema = new Schema<Object>();
-			schema.setType("object");
-			break;
+			case BOOLEAN:
+				schema = new Schema<Boolean>();
+				schema.setType("boolean");
+				break;
+			case DATE:
+				schema = new Schema<Long>();
+				schema.setType("integer");
+				schema.setFormat("int64");
+				break;
+			case FILE:
+				schema = new Schema<File>();
+				schema.setType("string");
+				schema.setFormat("binary");
+				break;
+			case INTEGER:
+				schema = new Schema<Integer>();
+				schema.setType("integer");
+				schema.setFormat("int32");
+				break;
+			case NUMBER:
+				schema = new Schema<Double>();
+				schema.setType("number");
+				schema.setFormat("double");
+				break;
+			case STRING:
+				schema = new Schema<String>();
+				schema.setType("string");
+				break;
+			default:
+				schema = new Schema<Object>();
+				schema.setType("object");
+				break;
 		}
 		schema.setMinimum(param.getMinimum());
 		schema.setMaximum(param.getMaximum());

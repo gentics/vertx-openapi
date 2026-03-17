@@ -14,6 +14,7 @@ import org.raml.model.parameter.QueryParameter;
 import org.raml.model.parameter.UriParameter;
 
 import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
+import com.gentics.vertx.openapi.model.ExtendedSecurityScheme;
 import com.gentics.vertx.openapi.model.ParameterProvider;
 import com.gentics.vertx.openapi.model.RestModel;
 
@@ -450,6 +451,21 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	 * @return
 	 */
 	InternalEndpointRoute setMutating(Boolean mutating);
+
+	/**
+	 * Get security schemes, defined for this particular Endpoint
+	 * 
+	 * @return
+	 */
+	Map<String, ExtendedSecurityScheme> getExtendedSecuritySchemes();
+
+	/**
+	 * Set security schemes, defined for this particular Endpoint
+	 * 
+	 * @param schemes
+	 * @return
+	 */
+	InternalEndpointRouteImpl setExtendedSecuritySchemes(Map<String, ExtendedSecurityScheme> schemes);
 
 	/**
 	 * Set the security schemes for this route
