@@ -44,12 +44,14 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
 import com.gentics.vertx.openapi.misc.UtilsAndConstants;
+import com.gentics.vertx.openapi.model.ExtendedSecurityScheme;
 import com.gentics.vertx.openapi.model.ParameterProvider;
 import com.gentics.vertx.openapi.model.RestModel;
 import com.gentics.vertx.openapi.model.serde.JsonArrayDeserializer;
 import com.gentics.vertx.openapi.model.serde.JsonArraySerializer;
 import com.gentics.vertx.openapi.model.serde.JsonObjectDeserializer;
 import com.gentics.vertx.openapi.model.serde.JsonObjectSerializer;
+import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableSet;
 
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -89,6 +91,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	 */
 	protected final Map<Integer, Response> exampleResponses = new LinkedHashMap<>();
 	protected final Map<Integer, Class<?>> exampleResponseClasses = new LinkedHashMap<>();
+	protected final Map<String, ExtendedSecurityScheme> securitySchemes = new LinkedHashMap<>();
 	protected final Set<String> consumes = new LinkedHashSet<>();
 	protected final Set<String> produces = new LinkedHashSet<>();
 	protected final Map<String, QueryParameter> parameters = new HashMap<>();
@@ -102,7 +105,6 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	protected String ramlPath;
 
 	protected Boolean mutating;
-	protected Collection<String> securitySchemes;
 
 	private boolean hidden;
 
@@ -390,18 +392,13 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 				} else {
 					exampleText = defaultMapper.writeValueAsString(model);
 				}
+				map.put("application/json", mimeType);
 			} catch (Exception e) {
+				log.debug("Response model is not JSON:" + model, e);
 				exampleText = model.toString();
-			}
-			mimeType.setExample(exampleText);
-			mimeType.setSchema(getJsonSchema(model.getClass()));
-			if (exampleText != null && (exampleText.startsWith("{") || exampleText.startsWith("["))) {
-				map.put("application/json", mimeType);
-			} else if (model.getClass().getSimpleName().toLowerCase().startsWith("json")) {
-				map.put("application/json", mimeType);
-			} else {
 				map.put("text/plain", mimeType);
 			}
+			mimeType.setExample(exampleText);
 		}
 
 		exampleResponses.put(status.code(), response);
@@ -636,12 +633,31 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public Collection<String> getSecuritySchemes() {
-		return securitySchemes;
+		return securitySchemes.keySet();
 	}
 
 	@Override
 	public InternalEndpointRoute setSecuritySchemes(Collection<String> securitySchemes) {
-		this.securitySchemes = securitySchemes;
+		if (securitySchemes != null) {
+			securitySchemes.stream().filter(scheme -> !this.securitySchemes.keySet().contains(scheme)).forEach(scheme -> this.securitySchemes.put(scheme, null));
+		} else {
+			this.securitySchemes.clear();
+		}
+		return this;
+	}
+
+	@Override
+	public Map<String, ExtendedSecurityScheme> getExtendedSecuritySchemes() {
+		return securitySchemes;
+	}
+
+	@Override
+	public InternalEndpointRouteImpl setExtendedSecuritySchemes(Map<String, ExtendedSecurityScheme> schemes) {
+		if (schemes != null) {
+			schemes.entrySet().stream().filter(e -> !Objects.equal(this.securitySchemes.get(e.getKey()), e.getValue())).forEach(e -> this.securitySchemes.put(e.getKey(), e.getValue()));
+		} else {
+			this.securitySchemes.clear();
+		}
 		return this;
 	}
 
@@ -678,13 +694,13 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public boolean isInsecure() {
-		return securitySchemes == null || securitySchemes.size() < 1;
+		return securitySchemes.size() < 1;
 	}
 
 	@Override
 	public InternalEndpointRoute setInsecure(boolean insecure) {
 		if (insecure) {
-			this.securitySchemes = null;
+			this.securitySchemes.clear();
 		}
 		return this;
 	}

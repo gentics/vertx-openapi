@@ -2,7 +2,7 @@ package com.gentics.vertx.openapi.route;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,6 +14,7 @@ import org.raml.model.parameter.QueryParameter;
 
 import com.gentics.vertx.openapi.metadata.InternalEndpointRoute;
 import com.gentics.vertx.openapi.metadata.InternalEndpointRouteImpl;
+import com.gentics.vertx.openapi.model.ExtendedSecurityScheme;
 import com.gentics.vertx.openapi.model.ParameterProvider;
 import com.gentics.vertx.openapi.model.RestModel;
 
@@ -61,7 +62,7 @@ public final class InternalEndpointBuilder {
 	private Boolean hidden;
 	private Collection<Class<?>> modelComponents;
 	private Boolean insecure;
-	private Collection<String> secureWith;
+	private Map<String, ExtendedSecurityScheme> secureWith;
 	private ArrayList<Pair<String, QueryParameter>> queryParameterModels;
 
 	private InternalEndpointBuilder(Router router) {
@@ -472,13 +473,30 @@ public final class InternalEndpointBuilder {
 		return this;
 	}
 
+	/**
+	 * Secure the endpoint with a known scheme by its key
+	 * 
+	 * @param securityScheme
+	 * @return
+	 */
 	public InternalEndpointBuilder secureWith(String securityScheme) {
+		return secureWith(securityScheme, null);
+	}
+
+	/**
+	 * Secure the endpoint with a possibly unknown scheme 
+	 * 
+	 * @param securitySchemeKey
+	 * @return
+	 */
+	public InternalEndpointBuilder secureWith(String securitySchemeKey, ExtendedSecurityScheme scheme) {
 		if (this.secureWith == null) {
-			this.secureWith = new HashSet<>(1);
+			this.secureWith = new HashMap<>(1);
 		}
-		this.secureWith.add(securityScheme);
+		this.secureWith.put(securitySchemeKey, scheme);
 		return this;
 	}
+
 	/**
 	 * Build the wrapped
 	 * 
@@ -486,6 +504,8 @@ public final class InternalEndpointBuilder {
 	 */
 	public InternalEndpointRoute build() {		
 		InternalEndpointRouteImpl endpoint = new InternalEndpointRouteImpl(router, false, Optional.ofNullable(route));
+		endpoint.setExtendedSecuritySchemes(secureWith);
+
 		if (path != null) {
 			endpoint.path(path);
 		}

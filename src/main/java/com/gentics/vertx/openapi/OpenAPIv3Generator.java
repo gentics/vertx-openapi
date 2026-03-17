@@ -275,22 +275,33 @@ public class OpenAPIv3Generator {
 	 * @param openApi
 	 */
 	protected void addSecurity(OpenAPI openApi) {
+		Components components;
+		if (openApi.getComponents() == null) {
+			components = new Components();
+			openApi.setComponents(components);
+		} else {
+			components = openApi.getComponents();
+		}
 		if (security != null) {
-			Components components;
-			if (openApi.getComponents() == null) {
-				components = new Components();
-				openApi.setComponents(components);
-			} else {
-				components = openApi.getComponents();
-			}
 			security.entrySet().forEach(e -> {
-				components.addSecuritySchemes(e.getKey(), e.getValue().getScheme());
-				if (e.getValue().isGlobal()) {
-					SecurityRequirement req = new SecurityRequirement();
-					req.addList(e.getKey());
-					openApi.addSecurityItem(req);
-				}
+				addSecurity(openApi, e.getKey(), e.getValue());
 			});
+		}
+	}
+
+	/**
+	 * Add a security scheme for the key
+	 * 
+	 * @param openApi
+	 * @param key
+	 * @param scheme
+	 */
+	protected void addSecurity(OpenAPI openApi, String key, ExtendedSecurityScheme scheme) {
+		openApi.getComponents().addSecuritySchemes(key, scheme.getScheme());
+		if (scheme.isGlobal()) {
+			SecurityRequirement req = new SecurityRequirement();
+			req.addList(key);
+			openApi.addSecurityItem(req);
 		}
 	}
 
@@ -351,10 +362,13 @@ public class OpenAPIv3Generator {
 		if (method == null) {
 			method = HttpMethod.GET;
 		}
-		if (endpoint.getSecuritySchemes() != null) {
-			operation.setSecurity(endpoint.getSecuritySchemes().stream().map(scheme -> {
+		if (endpoint.getExtendedSecuritySchemes() != null) {
+			operation.setSecurity(endpoint.getExtendedSecuritySchemes().entrySet().stream().map(scheme -> {
 				SecurityRequirement req = new SecurityRequirement();
-				req.addList(scheme);
+				req.addList(scheme.getKey());
+				if (scheme.getValue() != null) {
+					addSecurity(context.openApi, scheme.getKey(), scheme.getValue());
+				}
 				return req;
 			}).collect(Collectors.toList()));
 		}
