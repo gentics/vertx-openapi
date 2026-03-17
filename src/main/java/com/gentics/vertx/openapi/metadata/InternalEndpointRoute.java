@@ -13,6 +13,7 @@ import org.raml.model.parameter.FormParameter;
 import org.raml.model.parameter.QueryParameter;
 import org.raml.model.parameter.UriParameter;
 
+import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
 import com.gentics.vertx.openapi.model.ParameterProvider;
 import com.gentics.vertx.openapi.model.RestModel;
 
@@ -532,4 +533,12 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	 * @param hidden
 	 */
 	void setHidden(boolean hidden);
+
+	/**
+	 * Get raw JSON schema for the class
+	 * 
+	 * @param clazz
+	 * @return
+	 */
+	JsonSchema getSchema(Class<? extends Object> clazz);
 }

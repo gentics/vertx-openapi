@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang.StringUtils;
 import org.raml.model.MimeType;
 import org.raml.model.Response;
 import org.raml.model.parameter.FormParameter;
@@ -40,6 +41,7 @@ import com.fasterxml.jackson.core.util.MinimalPrettyPrinter;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
 import com.gentics.vertx.openapi.misc.UtilsAndConstants;
 import com.gentics.vertx.openapi.model.ParameterProvider;
@@ -66,7 +68,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	protected static final Logger log = LoggerFactory.getLogger(InternalEndpointRoute.class);
 
-	protected static final Map<Class<?>, String> SCHEMA_CACHE = new ConcurrentHashMap<>();
+	protected static final Map<Class<?>, JsonSchema> SCHEMA_CACHE = new ConcurrentHashMap<>();
 	protected static final Set<HttpMethod> mutatingMethods = ImmutableSet.of(POST, PUT, DELETE);
 
 	protected static ObjectMapper defaultMapper;
@@ -169,8 +171,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	@Override
 	public InternalEndpointRoute method(HttpMethod method) {
 		if (this.method != null) {
-			throw new RuntimeException(
-					"The method for the endpoint was already set. The endpoint wrapper currently does not support more than one method per route.");
+			throw new RuntimeException("The method for the endpoint was already set. The endpoint wrapper currently does not support more than one method per route.");
 		}
 		this.method = method;
 		route.method(method);
@@ -226,24 +227,28 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public InternalEndpointRoute validate() {
+		if (hidden) {
+			log.debug("Skipping validation of descriptions of the hidden endpoint: " + getMethod() + " " + getRamlPath());
+			return this;
+		}
+
 		if (!produces.isEmpty() && produces.contains(UtilsAndConstants.APPLICATION_JSON) && exampleResponses.isEmpty()) {
-			throw new RuntimeException("Endpoint {" + getRamlPath() + "} has no example responses.");
+			throw new RuntimeException("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no example responses.");
 		}
 		if ((consumes.contains(UtilsAndConstants.APPLICATION_JSON) || consumes.contains(UtilsAndConstants.APPLICATION_JSON_UTF8))
 				&& exampleRequestMap == null) {
-			log.error("Endpoint {" + getPath() + "} has no example request.");
+			log.error("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no example request.");
 			throw new RuntimeException("Endpoint has no example request.");
 		}
 		if (isEmpty(description)) {
-			throw new RuntimeException("Endpoint {" + getPath() + "} has no description.");
+			throw new RuntimeException("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no description.");
 		}
 
 		// Check whether all segments have a description.
 		List<String> segments = getNamedSegments();
 		for (String segment : segments) {
 			if (!getUriParameters().containsKey(segment)) {
-				throw new RuntimeException(
-						"Missing URI description for path {" + getRamlPath() + "} segment {" + segment + "}");
+				throw new RuntimeException("Missing URI description for path {" + getMethod() + " " + getRamlPath() + "} segment {" + segment + "}");
 			}
 		}
 		return this;
@@ -251,6 +256,9 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public List<String> getNamedSegments() {
+		if (StringUtils.isBlank(getRamlPath())) {
+			return Collections.emptyList();
+		}
 		List<String> allMatches = new ArrayList<String>();
 		Matcher m = Pattern.compile("\\{[^}]*\\}").matcher(getRamlPath());
 		while (m.find()) {
@@ -308,7 +316,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public String getRamlPath() {
-		if (ramlPath == null) {
+		if (ramlPath == null && route.getPath() != null) {
 			return convertPath(route.getPath());
 		}
 		return ramlPath;
@@ -370,7 +378,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 		if (model instanceof RestModel) {
 			String json = ((RestModel) model).toJson(false);
 			mimeType.setExample(json);
-			mimeType.setSchema(getSchema(model.getClass()));
+			mimeType.setSchema(getJsonSchema(model.getClass()));
 			map.put("application/json", mimeType);
 		} else {
 			String exampleText = null;
@@ -385,9 +393,8 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 			} catch (Exception e) {
 				exampleText = model.toString();
 			}
-
 			mimeType.setExample(exampleText);
-			mimeType.setSchema(getSchema(model.getClass()));
+			mimeType.setSchema(getJsonSchema(model.getClass()));
 			if (exampleText != null && (exampleText.startsWith("{") || exampleText.startsWith("["))) {
 				map.put("application/json", mimeType);
 			} else if (model.getClass().getSimpleName().toLowerCase().startsWith("json")) {
@@ -402,8 +409,9 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 		return this;
 	}
 
-	private String getSchema(Class<? extends Object> clazz) {
-		return SCHEMA_CACHE.computeIfAbsent(clazz, this::getJsonSchema);
+	@Override
+	public JsonSchema getSchema(Class<? extends Object> clazz) {
+		return SCHEMA_CACHE.computeIfAbsent(clazz, this::getJsonSchemaObject);
 	}
 
 	@Override
@@ -437,14 +445,13 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 		MimeType mimeType = new MimeType();
 		String json = model.toJson(false);
 		mimeType.setExample(json);
-		mimeType.setSchema(getSchema(model.getClass()));
+		mimeType.setSchema(getJsonSchema(model.getClass()));
 
 		if (consumes != null && consumes.contains("multipart/form-data")) {
 			bodyMap.put("multipart/form-data", mimeType);
 		} else {
 			bodyMap.put("application/json", mimeType);
 		}
-
 		this.exampleRequestMap = bodyMap;
 		this.exampleRequestClass = model.getClass();
 		return this;
@@ -541,19 +548,43 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	}
 
 	/**
-	 * Generate the JSON schema for the given model class.
+	 * Generate the JSON schema object for the given model class.
 	 * 
 	 * @param clazz
 	 *            Model class
 	 * @return
 	 */
-	protected String getJsonSchema(Class<?> clazz) {
+	protected JsonSchema getJsonSchemaObject(Class<?> clazz) {
 		try {
-			com.fasterxml.jackson.module.jsonSchema.JsonSchema schema = schemaGen.generateSchema(clazz);
+			return schemaGen.generateSchema(clazz);
+		} catch (JsonProcessingException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/**
+	 * Make string out of the model class schema.
+	 * 
+	 * @param schema
+	 *            Model class schema
+	 * @return
+	 */
+	protected String getJsonSchema(JsonSchema schema) {
+		try {
 			return defaultMapper.writerWithDefaultPrettyPrinter().writeValueAsString(schema);
 		} catch (JsonProcessingException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	/**
+	 * Shortcut for making the string out of the schema class
+	 * 
+	 * @param clazz
+	 * @return
+	 */
+	protected String getJsonSchema(Class<?> clazz) {
+		return getJsonSchema(getSchema(clazz));
 	}
 
 	/**
@@ -652,7 +683,9 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public InternalEndpointRoute setInsecure(boolean insecure) {
-		this.securitySchemes = null;
+		if (insecure) {
+			this.securitySchemes = null;
+		}
 		return this;
 	}
 
