@@ -10,7 +10,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +46,7 @@ public class JsonSchemaGenerationStrategy extends AbstractGenerationStrategy<Jso
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	@Override
 	public boolean fillComponent(JsonSchema jsonSchema, Schema<?> schema, OpenAPI openApi, Set<String> usedComponents) {
-		log.info("Generating {} / {}", jsonSchema.getId(), schema.getName());
+		log.debug("Generating {} / {}", jsonSchema.getId(), schema.getName());
 		schema.set$id(jsonSchema.getId());
 		schema.setReadOnly(jsonSchema.getReadonly());
 		schema.set$ref(jsonSchema.get$ref());
@@ -166,9 +165,6 @@ public class JsonSchemaGenerationStrategy extends AbstractGenerationStrategy<Jso
 		default:
 			log.warn("Unknown JSON schema type: {}", jsonSchema.getType());
 			return false;
-		}
-		if (StringUtils.isNotBlank(schema.getName())) {
-			usedComponents.add(schema.getName());
 		}
 		return true;
 	}

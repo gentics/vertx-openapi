@@ -48,7 +48,7 @@ public class JavaReflectionGenerationStrategy extends AbstractGenerationStrategy
 	@SuppressWarnings("rawtypes")
 	@Override
 	public boolean fillComponent(Class<?> cls, Schema<?> schema, OpenAPI openApi, Set<String> usedComponents) {
-		log.info("Generating {} / {}", cls.getCanonicalName(), schema.getName());
+		log.debug("Generating {} / {}", cls.getCanonicalName(), schema.getName());
 
 		List<Stream<Field>> fieldStreams = new ArrayList<>();
 		final List<Type> generics = new ArrayList<>();
