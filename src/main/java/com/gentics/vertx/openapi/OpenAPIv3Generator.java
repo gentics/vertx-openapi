@@ -649,7 +649,8 @@ public class OpenAPIv3Generator {
 		} else if (refClass != null && refClass.getSimpleName().toLowerCase().startsWith("json")) {
 			mediaType.setExample(mimeType.getExample());
 			Schema<String> schema = new Schema<>();
-			schema.setType("object");
+			schema.set$ref("#/components/schemas/AnyJson");
+			context.usedComponents.add("AnyJson");
 			mediaType.setSchema(schema);
 			return new UnmodifiableMapEntry<String, MediaType>(key, mediaType);
 		} else {
