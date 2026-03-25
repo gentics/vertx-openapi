@@ -412,6 +412,11 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	}
 
 	@Override
+	public JsonSchema getSchema(String id) {
+		return SCHEMA_CACHE.values().stream().filter(schema -> schema.getId().equals(id)).findAny().orElse(null);
+	}
+
+	@Override
 	public Map<Integer, Class<?>> getExampleResponseClasses() {
 		return exampleResponseClasses;
 	}

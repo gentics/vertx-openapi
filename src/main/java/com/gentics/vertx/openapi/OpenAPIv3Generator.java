@@ -173,18 +173,26 @@ public class OpenAPIv3Generator {
 		} catch (IOException e) {
 			throw new RuntimeException("Could not add all verticles to raml generator", e);
 		}
-
-		if (!dontRemoveUnusedComponents && openApi.getComponents() != null && openApi.getComponents().getSchemas() != null) {
-			Set<String> keys = new HashSet<>(openApi.getComponents().getSchemas().keySet());
-			keys.forEach(schema -> {
-				if (!usedComponents.contains(schema)) {
-					openApi.getComponents().getSchemas().remove(schema);
-				}
-			});
-		}
+		postProcess(context);
 
 		OpenAPIVersionWriter writer = useVersion31 ? new V31Writer() : new V30Writer();
 		return writer.write(openApi, format, pretty);
+	}
+
+	/**
+	 * Do a post-processing of the prepared API.
+	 * 
+	 * @param context
+	 */
+	protected void postProcess(Context context) {
+		if (!dontRemoveUnusedComponents && context.openApi.getComponents() != null && context.openApi.getComponents().getSchemas() != null) {
+			Set<String> keys = new HashSet<>(context.openApi.getComponents().getSchemas().keySet());
+			keys.forEach(schema -> {
+				if (!context.usedComponents.contains(schema)) {
+					context.openApi.getComponents().getSchemas().remove(schema);
+				}
+			});
+		}
 	}
 
 	/**
@@ -738,7 +746,6 @@ public class OpenAPIv3Generator {
 		public final boolean useVersion31;
 
 		public Context(OpenAPI consumer, Set<String> usedComponents, boolean useVersion31) {
-			super();
 			this.openApi = consumer;
 			this.usedComponents = usedComponents;
 			this.useVersion31 = useVersion31;

@@ -91,7 +91,10 @@ public abstract class AbstractGenerationStrategy<T> implements ComponentGenerati
 			.filter(componentName -> StringUtils.isNotBlank(componentName))
 			.flatMap(componentName -> Optional.ofNullable(components.getSchemas().get(componentName)))
 			.or(() -> initSchema(input, openApi).flatMap(schema -> fillComponent(input, schema, openApi, usedComponents) ? Optional.of(schema) : Optional.empty()))
-			.map(Schema.class::cast);
+			.map(schema -> {
+				components.addSchemas(schema.getName(), schema);
+				return schema;
+			});
 	}
 
 	/**
@@ -111,7 +114,6 @@ public abstract class AbstractGenerationStrategy<T> implements ComponentGenerati
 			Schema<?> schema = components.getSchemas().computeIfAbsent(componentName, name -> new Schema<String>());
 			schema.setType("object");
 			schema.setName(componentName);
-			components.addSchemas(componentName, schema);
 			return schema;
 		});
 	}

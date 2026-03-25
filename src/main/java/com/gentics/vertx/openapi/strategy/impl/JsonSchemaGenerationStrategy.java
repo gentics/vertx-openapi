@@ -142,8 +142,28 @@ public class JsonSchemaGenerationStrategy extends AbstractGenerationStrategy<Jso
 				if (properties != null) {
 					Map<String, Schema> schemaProperties = properties.entrySet().stream().map(e -> {
 						Schema property = new Schema<>();
-						maybeMakeComponentName(e.getValue()).ifPresent(property::setName);
-						fillComponent(e.getValue(), property, openApi, usedComponents);
+						JsonSchema propOjectSchema = e.getValue();
+						maybeInternalRoute.flatMap(ir -> Optional.ofNullable(ir.getSchema(propOjectSchema.getId())).or(() -> {
+							try {
+								return Optional.ofNullable(ir.getSchema(Class.forName(propOjectSchema.getId().substring("urn:jsonschema:".length()).replace(":", "."))));
+							} catch (Throwable e1) {
+								return Optional.empty();
+							}
+						})).flatMap(sch -> maybeMakeComponentName(sch).map(name -> {
+							if (!openApi.getComponents().getSchemas().containsKey(name)) {
+								Schema reference = new Schema<>();
+								reference.setName(name);
+								fillComponent(sch, reference, openApi, usedComponents);
+								openApi.getComponents().addSchemas(name, reference);
+							}
+							property.set$ref("#/components/schemas/" + name);
+							usedComponents.add(name);
+							return sch;
+						})).orElseGet(() -> {
+							maybeMakeComponentName(propOjectSchema).ifPresent(property::setName);
+							fillComponent(propOjectSchema, property, openApi, usedComponents);
+							return propOjectSchema;
+						});
 						return Pair.of(e.getKey(), property);
 					}).collect(Collectors.toMap(Pair::getKey, Pair::getValue));
 					schema.setProperties(schemaProperties);

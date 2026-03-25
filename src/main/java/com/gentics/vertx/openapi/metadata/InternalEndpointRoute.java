@@ -557,4 +557,12 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	 * @return
 	 */
 	JsonSchema getSchema(Class<? extends Object> clazz);
+
+	/**
+	 * Get raw JSON schema by its URN ID. May return null, if no schema found.
+	 * 
+	 * @param clazz
+	 * @return
+	 */
+	JsonSchema getSchema(String id);
 }
