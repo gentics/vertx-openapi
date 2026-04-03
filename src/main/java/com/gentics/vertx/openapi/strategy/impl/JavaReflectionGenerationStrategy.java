@@ -283,7 +283,7 @@ public class JavaReflectionGenerationStrategy extends AbstractGenerationStrategy
 		return Optional.ofNullable(input)
 				.filter(Class.class::isInstance)
 				.map(Class.class::cast)
-				.filter(t -> !t.isPrimitive() && !t.getCanonicalName().startsWith("java."))
+				.filter(t -> !t.isPrimitive() && t.getCanonicalName() != null && !t.getCanonicalName().startsWith("java."))
 				.map(Class.class::cast);
 	}
 }
