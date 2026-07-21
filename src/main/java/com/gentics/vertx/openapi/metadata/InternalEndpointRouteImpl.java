@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,7 +52,6 @@ import com.gentics.vertx.openapi.model.serde.JsonArrayDeserializer;
 import com.gentics.vertx.openapi.model.serde.JsonArraySerializer;
 import com.gentics.vertx.openapi.model.serde.JsonObjectDeserializer;
 import com.gentics.vertx.openapi.model.serde.JsonObjectSerializer;
-import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableSet;
 
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -413,7 +413,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public JsonSchema getSchema(String id) {
-		return SCHEMA_CACHE.values().stream().filter(schema -> schema.getId().equals(id)).findAny().orElse(null);
+		return SCHEMA_CACHE.values().stream().filter(schema -> Objects.equals(schema.getId(), id)).findAny().orElse(null);
 	}
 
 	@Override
@@ -659,7 +659,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	@Override
 	public InternalEndpointRouteImpl setExtendedSecuritySchemes(Map<String, ExtendedSecurityScheme> schemes) {
 		if (schemes != null) {
-			schemes.entrySet().stream().filter(e -> !Objects.equal(this.securitySchemes.get(e.getKey()), e.getValue())).forEach(e -> this.securitySchemes.put(e.getKey(), e.getValue()));
+			schemes.entrySet().stream().filter(e -> !Objects.equals(this.securitySchemes.get(e.getKey()), e.getValue())).forEach(e -> this.securitySchemes.put(e.getKey(), e.getValue()));
 		} else {
 			this.securitySchemes.clear();
 		}

@@ -30,7 +30,7 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.build.timestamp.format>yyyyMMdd-HHmmss</maven.build.timestamp.format>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<vertx.version>5.0.5</vertx.version>
+		<vertx.version>5.0.12</vertx.version>
 	</properties>
 
 	<dependencies>
