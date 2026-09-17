@@ -105,7 +105,7 @@
 		<repository>
 			<id>gentics.nexus.releases</id>
 			<name>Gentics Nexus Maven Repository</name>
-			<url>https://repo.gentics.com/repository/maven-releases/</url>
+			<url>https://repo.gentics.com/repository/maven-releases-oss/</url>
 		</repository>
 		<snapshotRepository>
 			<id>gentics.nexus.snapshots</id>
