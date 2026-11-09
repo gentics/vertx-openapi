@@ -10,7 +10,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang.BooleanUtils;
-import org.raml.model.parameter.QueryParameter;
+import com.gentics.vertx.openapi.model.parameters.QueryParameter;
 
 /**
  * Common interface for query parameters.
@@ -24,11 +24,11 @@ public interface ParameterProvider {
 	}
 
 	/**
-	 * Return the RAML parameters for this provider.
+	 * Return the query parameter definitions of this provider.
 	 * 
 	 * @return
 	 */
-	Map<? extends String, ? extends QueryParameter> getRAMLParameters();
+	Map<? extends String, ? extends QueryParameter> getParameterDefinitions();
 
 	/**
 	 * Set the query parameter.

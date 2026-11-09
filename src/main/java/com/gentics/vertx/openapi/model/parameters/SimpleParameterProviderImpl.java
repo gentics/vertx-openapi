@@ -4,8 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.raml.model.ParamType;
-import org.raml.model.parameter.QueryParameter;
+import com.gentics.vertx.openapi.model.ParamType;
 
 import com.gentics.vertx.openapi.model.ParameterProvider;
 
@@ -60,7 +59,7 @@ public class SimpleParameterProviderImpl implements ParameterProvider {
 	}
 
 	@Override
-	public Map<? extends String, ? extends QueryParameter> getRAMLParameters() {
+	public Map<? extends String, ? extends QueryParameter> getParameterDefinitions() {
 		Map<String, QueryParameter> parameters = new HashMap<>();
 
 		this.parameters.entries().forEach(e -> {
