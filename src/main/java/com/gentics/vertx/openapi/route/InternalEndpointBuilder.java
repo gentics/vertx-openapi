@@ -319,7 +319,7 @@ public final class InternalEndpointBuilder {
 	}
 
 	/**
-	 * Explicitly set the path template. This will override the path which is otherwise transformed using the vertx route path.
+	 * Explicitly set the template path, used in the specification. This will override the path which is otherwise transformed using the vertx route path.
 	 * 
 	 * @param path
 	 */
@@ -328,6 +328,13 @@ public final class InternalEndpointBuilder {
 		return this;
 	}
 
+	/**
+	 * Add a query parameter to the endpoint.
+	 * 
+	 * @param name
+	 * @param parameter
+	 * @return
+	 */
 	public InternalEndpointBuilder withQueryParameter(String name, QueryParameter parameter) {
 		if (this.queryParameterModels == null) {
 			this.queryParameterModels = new ArrayList<Pair<String, QueryParameter>>(10);

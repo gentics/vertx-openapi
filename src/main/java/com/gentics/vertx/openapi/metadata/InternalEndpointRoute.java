@@ -236,7 +236,7 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	InternalEndpointRoute pathRegex(String path);
 
 	/**
-	 * Return the path template of the route. If non null the path which was previously set using {@link #setPathTemplate(String)} will be returned. Otherwise the converted
+	 * Return the template path of the route, used in the specification. If non null the path which was previously set using {@link #setPathTemplate(String)} will be returned. Otherwise the converted
 	 * vert.x route path is returned. A vert.x path /:nodeUuid is converted to the path template /{nodeUuid}.
 	 * 
 	 * @return Path template
@@ -279,7 +279,7 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	Map<String, UriParameter> getUriParameters();
 
 	/**
-	 * Explicitly set the path template. This will override the path which is otherwise transformed using the vertx route path.
+	 * Explicitly set the template path, used in the specification. This will override the path which is otherwise transformed using the vertx route path.
 	 * 
 	 * @param path
 	 */
