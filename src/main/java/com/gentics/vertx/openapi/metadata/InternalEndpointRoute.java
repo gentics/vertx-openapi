@@ -7,11 +7,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.raml.model.MimeType;
-import org.raml.model.Response;
-import org.raml.model.parameter.FormParameter;
-import org.raml.model.parameter.QueryParameter;
-import org.raml.model.parameter.UriParameter;
+import com.gentics.vertx.openapi.model.MimeType;
+import com.gentics.vertx.openapi.model.Response;
+import com.gentics.vertx.openapi.model.parameters.FormParameter;
+import com.gentics.vertx.openapi.model.parameters.QueryParameter;
+import com.gentics.vertx.openapi.model.parameters.UriParameter;
 
 import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
 import com.gentics.vertx.openapi.model.ExtendedSecurityScheme;
@@ -27,7 +27,7 @@ import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 
 /**
- * Simple wrapper for vert.x routes. The wrapper is commonly used to generate RAML descriptions for the route.
+ * Simple wrapper for vert.x routes. The wrapper is commonly used to generate OpenAPI descriptions for the route.
  */
 public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute> {
 
@@ -213,7 +213,7 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	InternalEndpointRoute failureHandler(Handler<RoutingContext> failureHandler);
 
 	/**
-	 * Parse the RAML path and return a list of all segment name variables.
+	 * Parse the path template and return a list of all segment name variables.
 	 * 
 	 * @return List of path segments
 	 */
@@ -236,12 +236,12 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	InternalEndpointRoute pathRegex(String path);
 
 	/**
-	 * Return the path used for RAML. If non null the path which was previously set using {@link #setRAMLPath(String)} will be returned. Otherwise the converted
-	 * vert.x route path is returned. A vert.x path /:nodeUuid is converted to a RAML path /{nodeUuid}.
+	 * Return the template path of the route, used in the specification. If non null the path which was previously set using {@link #setPathTemplate(String)} will be returned. Otherwise the converted
+	 * vert.x route path is returned. A vert.x path /:nodeUuid is converted to the path template /{nodeUuid}.
 	 * 
-	 * @return RAML path
+	 * @return Path template
 	 */
-	String getRamlPath();
+	String getPathTemplate();
 
 	/**
 	 * Set the endpoint display name.
@@ -279,11 +279,34 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	Map<String, UriParameter> getUriParameters();
 
 	/**
-	 * Explicitly set the RAML path. This will override the path which is otherwise transformed using the vertx route path.
+	 * Explicitly set the template path, used in the specification. This will override the path which is otherwise transformed using the vertx route path.
 	 * 
 	 * @param path
 	 */
-	InternalEndpointRoute setRAMLPath(String path);
+	InternalEndpointRoute setPathTemplate(String path);
+
+	/**
+	 * Return the template path of the route, used in the specification.
+	 *
+	 * @deprecated Use {@link InternalEndpointRoute#getPathTemplate()}
+	 * @return Path template
+	 */
+	@Deprecated
+	default String getRamlPath() {
+		return getPathTemplate();
+	}
+
+	/**
+	 * Explicitly set the template path, used in the specification.
+	 *
+	 * @deprecated Use {@link InternalEndpointRoute#setPathTemplate(String)}
+	 * @param path
+	 * @return Fluent API
+	 */
+	@Deprecated
+	default InternalEndpointRoute setRAMLPath(String path) {
+		return setPathTemplate(path);
+	}
 
 	/**
 	 * Add new query parameter.
@@ -324,7 +347,7 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	default InternalEndpointRoute addQueryParameters(Class<? extends ParameterProvider> clazz) {
 		try {
 			ParameterProvider provider = clazz.getConstructor().newInstance();
-			provider.getRAMLParameters().entrySet().forEach(e -> addQueryParameter(e.getKey(), e.getValue()));
+			provider.getParameterDefinitions().entrySet().forEach(e -> addQueryParameter(e.getKey(), e.getValue()));
 		} catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException | SecurityException e) {
 			e.printStackTrace();
 		}

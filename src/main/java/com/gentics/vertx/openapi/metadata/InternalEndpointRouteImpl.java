@@ -22,13 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang.StringUtils;
-import org.raml.model.MimeType;
-import org.raml.model.Response;
-import org.raml.model.parameter.FormParameter;
-import org.raml.model.parameter.Header;
-import org.raml.model.parameter.QueryParameter;
-import org.raml.model.parameter.UriParameter;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,8 +40,14 @@ import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
 import com.gentics.vertx.openapi.misc.UtilsAndConstants;
 import com.gentics.vertx.openapi.model.ExtendedSecurityScheme;
+import com.gentics.vertx.openapi.model.MimeType;
 import com.gentics.vertx.openapi.model.ParameterProvider;
+import com.gentics.vertx.openapi.model.Response;
 import com.gentics.vertx.openapi.model.RestModel;
+import com.gentics.vertx.openapi.model.parameters.FormParameter;
+import com.gentics.vertx.openapi.model.parameters.Header;
+import com.gentics.vertx.openapi.model.parameters.QueryParameter;
+import com.gentics.vertx.openapi.model.parameters.UriParameter;
 import com.gentics.vertx.openapi.model.serde.JsonArrayDeserializer;
 import com.gentics.vertx.openapi.model.serde.JsonArraySerializer;
 import com.gentics.vertx.openapi.model.serde.JsonObjectDeserializer;
@@ -102,7 +102,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	protected Class<? extends RestModel> exampleRequestClass = null;
 	protected String pathRegex;
 	protected HttpMethod method;
-	protected String ramlPath;
+	protected String pathTemplate;
 
 	protected Boolean mutating;
 
@@ -230,27 +230,27 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	@Override
 	public InternalEndpointRoute validate() {
 		if (hidden) {
-			log.debug("Skipping validation of descriptions of the hidden endpoint: " + getMethod() + " " + getRamlPath());
+			log.debug("Skipping validation of descriptions of the hidden endpoint: " + getMethod() + " " + getPathTemplate());
 			return this;
 		}
 
 		if (!produces.isEmpty() && produces.contains(UtilsAndConstants.APPLICATION_JSON) && exampleResponses.isEmpty()) {
-			throw new RuntimeException("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no example responses.");
+			throw new RuntimeException("Endpoint {" + getMethod() + " " + getPathTemplate() + "} has no example responses.");
 		}
 		if ((consumes.contains(UtilsAndConstants.APPLICATION_JSON) || consumes.contains(UtilsAndConstants.APPLICATION_JSON_UTF8))
 				&& exampleRequestMap == null) {
-			log.error("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no example request.");
+			log.error("Endpoint {" + getMethod() + " " + getPathTemplate() + "} has no example request.");
 			throw new RuntimeException("Endpoint has no example request.");
 		}
 		if (isEmpty(description)) {
-			throw new RuntimeException("Endpoint {" + getMethod() + " " + getRamlPath() + "} has no description.");
+			throw new RuntimeException("Endpoint {" + getMethod() + " " + getPathTemplate() + "} has no description.");
 		}
 
 		// Check whether all segments have a description.
 		List<String> segments = getNamedSegments();
 		for (String segment : segments) {
 			if (!getUriParameters().containsKey(segment)) {
-				throw new RuntimeException("Missing URI description for path {" + getMethod() + " " + getRamlPath() + "} segment {" + segment + "}");
+				throw new RuntimeException("Missing URI description for path {" + getMethod() + " " + getPathTemplate() + "} segment {" + segment + "}");
 			}
 		}
 		return this;
@@ -258,11 +258,11 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public List<String> getNamedSegments() {
-		if (StringUtils.isBlank(getRamlPath())) {
+		if (StringUtils.isBlank(getPathTemplate())) {
 			return Collections.emptyList();
 		}
 		List<String> allMatches = new ArrayList<String>();
-		Matcher m = Pattern.compile("\\{[^}]*\\}").matcher(getRamlPath());
+		Matcher m = Pattern.compile("\\{[^}]*\\}").matcher(getPathTemplate());
 		while (m.find()) {
 			allMatches.add(m.group().substring(1, m.group().length() - 1));
 		}
@@ -317,11 +317,11 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	}
 
 	@Override
-	public String getRamlPath() {
-		if (ramlPath == null && route.getPath() != null) {
+	public String getPathTemplate() {
+		if (pathTemplate == null && route.getPath() != null) {
 			return convertPath(route.getPath());
 		}
-		return ramlPath;
+		return pathTemplate;
 	}
 
 	@Override
@@ -510,7 +510,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	public InternalEndpointRoute addQueryParameters(Class<? extends ParameterProvider> clazz) {
 		try {
 			ParameterProvider provider = clazz.getConstructor().newInstance();
-			parameters.putAll(provider.getRAMLParameters());
+			parameters.putAll(provider.getParameterDefinitions());
 		} catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException | SecurityException e) {
 			e.printStackTrace();
 		}
@@ -524,8 +524,8 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	}
 
 	@Override
-	public InternalEndpointRoute setRAMLPath(String path) {
-		this.ramlPath = path;
+	public InternalEndpointRoute setPathTemplate(String path) {
+		this.pathTemplate = path;
 		return this;
 	}
 
@@ -546,7 +546,7 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 
 	@Override
 	public int compareTo(InternalEndpointRoute o) {
-		return getRamlPath().compareTo(o.getRamlPath());
+		return getPathTemplate().compareTo(o.getPathTemplate());
 	}
 
 	/**
@@ -590,10 +590,10 @@ public class InternalEndpointRouteImpl implements InternalEndpointRoute {
 	}
 
 	/**
-	 * Convert the provided vertx path to a RAML path.
+	 * Convert the provided vertx path to a path template.
 	 * 
 	 * @param path
-	 * @return RAML Path which contains '{}' instead of ':' characters
+	 * @return Path template which contains '{}' instead of ':' characters
 	 */
 	private String convertPath(String path) {
 		StringBuilder builder = new StringBuilder();

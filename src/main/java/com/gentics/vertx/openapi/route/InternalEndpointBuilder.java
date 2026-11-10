@@ -9,8 +9,8 @@ import java.util.Optional;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.Triple;
-import org.raml.model.parameter.FormParameter;
-import org.raml.model.parameter.QueryParameter;
+import com.gentics.vertx.openapi.model.parameters.FormParameter;
+import com.gentics.vertx.openapi.model.parameters.QueryParameter;
 
 import com.gentics.vertx.openapi.metadata.InternalEndpointRoute;
 import com.gentics.vertx.openapi.metadata.InternalEndpointRouteImpl;
@@ -47,7 +47,7 @@ public final class InternalEndpointBuilder {
 	private String displayName;
 	private String description;
 	private List<Triple<String, String, String>> uriParameters;
-	private String ramlPath;
+	private String pathTemplate;
 	private List<Triple<String, String, String>> queryParameters;
 	private List<Class<? extends ParameterProvider>> queryParameterProviders;
 	private String[] traits;
@@ -319,15 +319,34 @@ public final class InternalEndpointBuilder {
 	}
 
 	/**
-	 * Explicitly set the RAML path. This will override the path which is otherwise transformed using the vertx route path.
+	 * Explicitly set the template path, used in the specification. This will override the path which is otherwise transformed using the vertx route path.
 	 * 
 	 * @param path
 	 */
-	public InternalEndpointBuilder withRAMLPath(String path) {
-		this.ramlPath = path;
+	public InternalEndpointBuilder withPathTemplate(String path) {
+		this.pathTemplate = path;
 		return this;
 	}
 
+	/**
+	 * Explicitly set the template path, used in the specification.
+	 *
+	 * @deprecated Use {@link InternalEndpointBuilder#withPathTemplate(String)}
+	 * @param path
+	 * @return Fluent API
+	 */
+	@Deprecated
+	public InternalEndpointBuilder withRAMLPath(String path) {
+		return withPathTemplate(path);
+	}
+
+	/**
+	 * Add a query parameter to the endpoint.
+	 * 
+	 * @param name
+	 * @param parameter
+	 * @return
+	 */
 	public InternalEndpointBuilder withQueryParameter(String name, QueryParameter parameter) {
 		if (this.queryParameterModels == null) {
 			this.queryParameterModels = new ArrayList<Pair<String, QueryParameter>>(10);
@@ -548,8 +567,8 @@ public final class InternalEndpointBuilder {
 		if (uriParameters != null) {
 			uriParameters.forEach(up -> endpoint.addUriParameter(up.getLeft(), up.getMiddle(), up.getRight()));
 		}
-		if (ramlPath != null) {
-			endpoint.setRAMLPath(ramlPath);
+		if (pathTemplate != null) {
+			endpoint.setPathTemplate(pathTemplate);
 		}
 		if (queryParameters != null) {
 			queryParameters.forEach(qp -> endpoint.addQueryParameter(qp.getLeft(), qp.getMiddle(), qp.getRight()));

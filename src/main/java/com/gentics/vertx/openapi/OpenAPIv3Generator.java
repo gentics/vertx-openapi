@@ -24,8 +24,8 @@ import javax.annotation.Nonnull;
 import org.apache.commons.collections4.keyvalue.UnmodifiableMapEntry;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
-import org.raml.model.MimeType;
-import org.raml.model.parameter.AbstractParam;
+import com.gentics.vertx.openapi.model.MimeType;
+import com.gentics.vertx.openapi.model.parameters.AbstractParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -171,7 +171,7 @@ public class OpenAPIv3Generator {
 				addRouter(context, routerAndParent.getValue(), routerAndParent.getKey(), maybePathItemTransformer);
 			}
 		} catch (IOException e) {
-			throw new RuntimeException("Could not add all verticles to raml generator", e);
+			throw new RuntimeException("Could not add all verticles to OpenAPI generator", e);
 		}
 		postProcess(context);
 
@@ -420,7 +420,7 @@ public class OpenAPIv3Generator {
 					MediaType mediaType = new MediaType();
 					mediaType.setSchema(schema);
 					String mimeKey = null;
-					org.raml.model.MimeType bodyMime = null;
+					com.gentics.vertx.openapi.model.MimeType bodyMime = null;
 					if (e.getValue() != null && e.getValue().getBody() != null) {
 						bodyMime = e.getValue().getBody().get("application/json");
 						mimeKey = "application/json";
@@ -539,8 +539,8 @@ public class OpenAPIv3Generator {
 	protected void addRoute(Context context, String parent, Route route, Optional<BiFunction<String, PathItem, String>> maybePathItemTransformer) throws IOException {
 		String rawPath = route.getPath();
 		InternalEndpointRoute internalRoute = (InternalEndpointRoute) route.metadata().get(InternalEndpointRoute.class.getCanonicalName());
-		if (internalRoute != null && StringUtils.isNotBlank(internalRoute.getRamlPath()) ) {
-			rawPath = internalRoute.getRamlPath();
+		if (internalRoute != null && StringUtils.isNotBlank(internalRoute.getPathTemplate()) ) {
+			rawPath = internalRoute.getPathTemplate();
 		} else if (StringUtils.isBlank(rawPath)) {
 			return;
 		}
