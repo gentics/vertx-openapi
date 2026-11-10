@@ -31,6 +31,17 @@ public interface ParameterProvider {
 	Map<? extends String, ? extends QueryParameter> getParameterDefinitions();
 
 	/**
+	 * Return the query parameter definitions of this provider.
+	 *
+	 * @deprecated Use {@link ParameterProvider#getParameterDefinitions()}
+	 * @return
+	 */
+	@Deprecated
+	default Map<? extends String, ? extends QueryParameter> getRAMLParameters() {
+		return getParameterDefinitions();
+	}
+
+	/**
 	 * Set the query parameter.
 	 * 
 	 * @param name

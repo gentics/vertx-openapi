@@ -329,6 +329,18 @@ public final class InternalEndpointBuilder {
 	}
 
 	/**
+	 * Explicitly set the template path, used in the specification.
+	 *
+	 * @deprecated Use {@link InternalEndpointBuilder#withPathTemplate(String)}
+	 * @param path
+	 * @return Fluent API
+	 */
+	@Deprecated
+	public InternalEndpointBuilder withRAMLPath(String path) {
+		return withPathTemplate(path);
+	}
+
+	/**
 	 * Add a query parameter to the endpoint.
 	 * 
 	 * @param name

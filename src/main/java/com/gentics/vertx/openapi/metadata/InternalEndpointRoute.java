@@ -286,6 +286,29 @@ public interface InternalEndpointRoute extends Comparable<InternalEndpointRoute>
 	InternalEndpointRoute setPathTemplate(String path);
 
 	/**
+	 * Return the template path of the route, used in the specification.
+	 *
+	 * @deprecated Use {@link InternalEndpointRoute#getPathTemplate()}
+	 * @return Path template
+	 */
+	@Deprecated
+	default String getRamlPath() {
+		return getPathTemplate();
+	}
+
+	/**
+	 * Explicitly set the template path, used in the specification.
+	 *
+	 * @deprecated Use {@link InternalEndpointRoute#setPathTemplate(String)}
+	 * @param path
+	 * @return Fluent API
+	 */
+	@Deprecated
+	default InternalEndpointRoute setRAMLPath(String path) {
+		return setPathTemplate(path);
+	}
+
+	/**
 	 * Add new query parameter.
 	 * 
 	 * @param name
